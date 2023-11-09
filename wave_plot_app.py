@@ -15,7 +15,7 @@ for file in csv_files:
     filename = os.path.splitext(os.path.basename(file))[0]
     dataframes[filename] = pd.read_csv(file, skiprows=2)
 
-def plot_waves(dataframes, freq, db):
+def plot_waves(dataframes, freq=16000, db=90):
     for filename, df in dataframes.items():
         khz = df[df['Freq(Hz)'] == freq]
         dbkhz = khz[khz['Level(dB)'] == db]
@@ -32,6 +32,11 @@ def plot_waves(dataframes, freq, db):
             fig, ax = plt.subplots()  # Create a new figure for each plot
             ax.plot(final)
             ax.plot(highest_peaks, final[highest_peaks], "x")
+            for peak in highest_peaks:
+                ax.annotate(f'{final[peak]:.3f}', (peak, final[peak]),
+                            textcoords="offset points", xytext=(0,3),
+                            ha='center', fontsize=8, color='red')
+
             ax.set_title(f'sheet: {filename}')
             st.pyplot(fig)
 
