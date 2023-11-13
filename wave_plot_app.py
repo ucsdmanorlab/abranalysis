@@ -13,7 +13,10 @@ csv_files = glob.glob(os.path.join(current_directory, 'ABR_exported_files/*.csv'
 dataframes = {}
 for file in csv_files:
     filename = os.path.splitext(os.path.basename(file))[0]
-    dataframes[filename] = pd.read_csv(file, skiprows=2)
+    if pd.read_csv(file).shape[1] > 1:
+        dataframes[filename] = pd.read_csv(file)
+    else:
+        dataframes[filename] = pd.read_csv(file, skiprows=2)
 
 def plot_waves(dataframes, freq=16000, db=90):
     for filename, df in dataframes.items():
