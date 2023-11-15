@@ -36,7 +36,7 @@ def plot_waves(dataframes, freq=16000, db=90):
             ax.plot(final)
             ax.plot(highest_peaks, final[highest_peaks], "x")
             for peak in highest_peaks:
-                ax.annotate(f'{final[peak]:.3f}', (peak, final[peak]),
+                ax.annotate(f'{final[peak]:.5f}', (peak, final[peak]),
                             textcoords="offset points", xytext=(0,3),
                             ha='center', fontsize=8, color='red')
 
