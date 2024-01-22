@@ -1,10 +1,9 @@
-streamlit
-fdasrsf
-plotly
-pandas
-numpy
-scipy
+streamlit==1.27.0
+fdasrsf==2.4.3
+plotly==5.18.0
+pandas==2.1.1
+numpy==1.26.3
+scipy==1.10.1
 os
-tempfile
-base64
+backports.tempfile==1.0
 warnings
