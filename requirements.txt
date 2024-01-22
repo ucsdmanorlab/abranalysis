@@ -1,3 +1,4 @@
+streamlit
 fdasrsf
 plotly
 pandas
