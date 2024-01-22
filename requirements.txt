@@ -6,4 +6,5 @@ scipy
 os
 tempfile
 base64
+streamlit
 warnings

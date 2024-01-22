@@ -1,5 +1,5 @@
 import streamlit as st
-#import fdasrsf as fs
+import fdasrsf as fs
 import plotly.figure_factory as ff
 import pandas as pd
 import numpy as np
@@ -8,8 +8,6 @@ import os
 import tempfile
 from scipy.interpolate import CubicSpline
 import plotly.graph_objects as go
-#import kaleido
-import base64
 import warnings                               
 warnings.filterwarnings('ignore')
 
@@ -121,14 +119,6 @@ def plotting_waves_cubic_spline(df, freq=16000, db=90, n=45):
     # Show the plot using Streamlit
     return fig
 
-def get_download_link(fig):
-    # Convert the plot to an image
-    plot_image = fig.to_image(format="png", engine="plotly")
-    plot_image_b64 = base64.b64encode(plot_image).decode()
-
-    # Create a download link
-    href = f'<a href="data:image/png;base64,{plot_image_b64}" download="plot.png">Download Plot</a>'
-    return href
 
 def update_title_and_legend_if_single_frequency(fig, selected_freqs):
     if len(set(selected_freqs)) == 1:
