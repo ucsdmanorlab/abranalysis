@@ -281,7 +281,7 @@ def plot_3d_surface(df, freq, y_min, y_max):
 
     # Plot all time-warped waves in the array
     for db, warped_waves in zip(db_levels, warped_waves_array):
-        fig.add_trace(go.Scatter3d(x=[db] * len(warped_waves), y=np.linspace(0, 10, len(warped_waves)), z=warped_waves, mode='lines', name=f'dB: {db}', line=dict(color=warped_waves, colorscale='Viridis')))
+        fig.add_trace(go.Scatter3d(x=[db] * len(warped_waves), y=np.linspace(0, 10, len(warped_waves)), z=warped_waves, mode='lines', name=f'dB: {db}'))
 
     # Create surface connecting the curves at each time point
     for i in range(len(time)):
