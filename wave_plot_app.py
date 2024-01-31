@@ -50,13 +50,6 @@ def plot_scatter_waves(df, freq, db, background_curves=False, smoothing_method='
                 font=dict(color='red', size=10)
             )
 
-        # Plot background curves if specified
-        if background_curves:
-            fig = plot_background_curves(fig, df, freq, db)
-
-        # Set layout options
-        fig.update_layout(title=f'{uploaded_file.name}', xaxis_title='Index', yaxis_title='Voltage (mV)')
-
     return fig
 
 def plotting_waves_cubic_spline(df, freq=16000, db=90, n=45):
@@ -134,8 +127,7 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
     # Get unique dB levels
     unique_dbs = sorted(df['Level(dB)'].unique())
 
-    # Create a color gradient based on dB levels
-    color_scale = np.linspace(0, 1, len(unique_dbs))
+    wave_colors = [f'rgb(255, {b}, {b})' for b in np.linspace(255, 100, len(unique_dbs))]
 
     waves_array = []  # Array to store all waves
 
@@ -165,8 +157,8 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
         waves_array = obj.fn.T  # Use the time-warped curves
 
     # Plot all waves in the array
-    for db, waves in zip(sorted(df['Level(dB)'].unique()), waves_array):
-        fig.add_trace(go.Scatter(x=np.linspace(0,10, waves_array.shape[1]), y=waves, mode='lines', name=f'dB: {db}'))
+    for i, (db, waves) in enumerate(zip(sorted(df['Level(dB)'].unique()), waves_array)):
+        fig.add_trace(go.Scatter(x=np.linspace(0,10, waves_array.shape[1]), y=waves, mode='lines', name=f'dB: {db}', line=dict(color=wave_colors[i])))
 
     fig.update_layout(title=f'{uploaded_files[0].name} - Frequency: {freq} Hz', xaxis_title='Time (ms)', yaxis_title='Voltage (mV)')
     fig.update_layout(annotations=annotations)
@@ -209,6 +201,8 @@ def plot_waves_single_tuple(df, freq, db, y_min, y_max):
             final = df.iloc[index, 48:]
             final = pd.to_numeric(final, errors='coerce')
 
+            time_axis = np.linspace(0, 10, len(final))
+
             # Find highest peaks separated by at least n data points
 
             if multiply_y_factor != 1:
@@ -238,12 +232,12 @@ def plot_waves_single_tuple(df, freq, db, y_min, y_max):
             i+=1
 
             # Mark the highest peaks with red markers
-            #peaks_trace = go.Scatter(x=highest_peaks, y=y_values[highest_peaks], mode='markers', marker=dict(color='red'), name='Peaks')
-            #fig.add_trace(peaks_trace)
+            peaks_trace = go.Scatter(x=time_axis[highest_peaks], y=y_values[highest_peaks], mode='markers', marker=dict(color='red'), name='Peaks')
+            fig.add_trace(peaks_trace)
 
-            #fig.add_trace(go.Scatter(x=relevant_troughs, y=y_values[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs'))
+            fig.add_trace(go.Scatter(x=time_axis[relevant_troughs], y=y_values[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs'))
 
-    #fig.update_layout(title=f'{uploaded_file.name}', xaxis_title='Index', yaxis_title='Voltage (mV)')
+    fig.update_layout(title=f'Freq = {freq}, dB = {db}', xaxis_title='Time (ms)', yaxis_title='Voltage (mV)')
     fig.update_layout(annotations=annotations)
     fig.update_layout(yaxis_range=[y_min, y_max])
 
@@ -254,6 +248,10 @@ def plot_3d_surface(df, freq, y_min, y_max):
 
     db_levels = sorted(df['Level(dB)'].unique())
     original_waves = []  # List to store original waves
+
+    #wave_colors = ['rgb(255, 0, 0)', 'rgb(255, 128, 128)', 'rgb(255, 191, 191)', 'rgb(255, 224, 224)', 'rgb(255, 240, 240)']
+    wave_colors = [f'rgb(255, {b}, {b})' for b in np.linspace(0, 0, len(db_levels))]
+    connecting_line_color = 'rgba(0, 255, 0, 0.3)'
 
     for db in db_levels:
         khz = df[(df['Freq(Hz)'] == freq) & (df['Level(dB)'] == db)]
@@ -280,13 +278,13 @@ def plot_3d_surface(df, freq, y_min, y_max):
     warped_waves_array = obj.fn.T  # Use the time-warped curves
 
     # Plot all time-warped waves in the array
-    for db, warped_waves in zip(db_levels, warped_waves_array):
-        fig.add_trace(go.Scatter3d(x=[db] * len(warped_waves), y=np.linspace(0, 10, len(warped_waves)), z=warped_waves, mode='lines', name=f'dB: {db}'))
+    for i, (db, warped_waves) in enumerate(zip(db_levels, warped_waves_array)):
+        fig.add_trace(go.Scatter3d(x=[db] * len(warped_waves), y=np.linspace(0, 10, len(warped_waves)), z=warped_waves, mode='lines', name=f'dB: {db}', line=dict(color=wave_colors[i])))
 
     # Create surface connecting the curves at each time point
     for i in range(len(time)):
         z_values_at_time = [warped_waves_array[j, i] for j in range(len(db_levels))]
-        fig.add_trace(go.Scatter3d(x=db_levels, y=[time[i]] * len(db_levels), z=z_values_at_time, mode='lines', line=dict(color='black'), name=f'Time: {time[i]:.2f} ms'))
+        fig.add_trace(go.Scatter3d(x=db_levels, y=[time[i]] * len(db_levels), z=z_values_at_time, mode='lines', name=f'Time: {time[i]:.2f} ms', line=dict(color=connecting_line_color)))
 
     fig.update_layout(title=f'{uploaded_files[0].name} - Frequency: {freq} Hz', scene=dict(xaxis_title='dB Level', yaxis_title='Time (ms)', zaxis_title='Voltage (mV)'))
     fig.update_layout(annotations=annotations)
@@ -311,22 +309,93 @@ def display_metrics_table(df, freq, db, baseline_level):
 
         # Find highest peaks separated by at least n data points
         peaks, _ = find_peaks(y_values, distance=15)
-        highest_peaks = peaks[np.argsort(y_values[peaks])[-5:]]
+        troughs, _ = find_peaks(-y_values, distance=15)
+        highest_peaks = peaks[np.argsort(final[peaks])[-5:]]
+        highest_peaks = np.sort(highest_peaks)
+        relevant_troughs = np.array([])
+        for p in range(len(highest_peaks)):
+            c = 0
+            for t in troughs:
+                if t > highest_peaks[p]:
+                    if p != 4:
+                        if t < highest_peaks[p+1]:
+                            relevant_troughs = np.append(relevant_troughs, int(t))
+                            break
+                    else:
+                        relevant_troughs = np.append(relevant_troughs, int(t))
+                        break
+        relevant_troughs = relevant_troughs.astype('i')
 
         if highest_peaks.size > 0:  # Check if highest_peaks is not empty
-            first_peak_amplitude = y_values[np.sort(highest_peaks)[0]]
+            first_peak_amplitude = y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]
+            latency_to_first_peak = highest_peaks[0] * (10 / len(y_values))  # Assuming 10 ms duration for waveform
 
             if len(highest_peaks) >= 4:
-                amplitude_ratio = y_values[np.sort(highest_peaks)[0]] / y_values[np.sort(highest_peaks)[3]]
+                amplitude_ratio = (y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]) / (y_values[highest_peaks[3]] - y_values[relevant_troughs[3]])
             else:
                 amplitude_ratio = np.nan
 
             metrics_table = pd.DataFrame({
-                'Metric': ['First Peak Amplitude', 'Amplitude Ratio (Peak1/Peak4)'],
-                'Value': [first_peak_amplitude, amplitude_ratio]
+                'Metric': ['First Peak Amplitude (mV)', 'Latency to First Peak (ms)', 'Amplitude Ratio (Peak1/Peak4)'],
+                'Value': [first_peak_amplitude, latency_to_first_peak, amplitude_ratio]
             })
 
             st.table(metrics_table)
+
+def display_metrics_table_all_db(df, freq, db_levels, baseline_level):
+    metrics_data = {'dB Level': [], 'First Peak Amplitude (mV)': [], 'Latency to First Peak (ms)': [], 'Amplitude Ratio (Peak1/Peak4)': []}
+    
+    for db in db_levels:
+        khz = df[(df['Freq(Hz)'] == freq) & (df['Level(dB)'] == db)]
+        if not khz.empty:
+            index = khz.index.values[0]
+            final = df.iloc[index, 48:]
+            final = pd.to_numeric(final, errors='coerce')
+
+            if multiply_y_factor != 1:
+                y_values = final * multiply_y_factor
+            else:
+                y_values = final
+            
+            # Adjust the waveform by subtracting the baseline level
+            y_values -= baseline_level
+
+            # Find highest peaks separated by at least n data points
+            peaks, _ = find_peaks(y_values, distance=15)
+            troughs, _ = find_peaks(-y_values, distance=15)
+            highest_peaks = peaks[np.argsort(final[peaks])[-5:]]
+            highest_peaks = np.sort(highest_peaks)
+            relevant_troughs = np.array([])
+            for p in range(len(highest_peaks)):
+                c = 0
+                for t in troughs:
+                    if t > highest_peaks[p]:
+                        if p != 4:
+                            if t < highest_peaks[p+1]:
+                                relevant_troughs = np.append(relevant_troughs, int(t))
+                                break
+                        else:
+                            relevant_troughs = np.append(relevant_troughs, int(t))
+                            break
+            relevant_troughs = relevant_troughs.astype('i')
+
+            if highest_peaks.size > 0:  # Check if highest_peaks is not empty
+                first_peak_amplitude = y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]
+                latency_to_first_peak = highest_peaks[0] * (10 / len(y_values))  # Assuming 10 ms duration for waveform
+
+                if len(highest_peaks) >= 4:
+                    amplitude_ratio = (y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]) / (y_values[highest_peaks[3]] - y_values[relevant_troughs[3]])
+                else:
+                    amplitude_ratio = np.nan
+
+                metrics_data['dB Level'].append(db)
+                metrics_data['First Peak Amplitude (mV)'].append(first_peak_amplitude)
+                metrics_data['Latency to First Peak (ms)'].append(latency_to_first_peak)
+                metrics_data['Amplitude Ratio (Peak1/Peak4)'].append(amplitude_ratio)
+
+    metrics_table = pd.DataFrame(metrics_data)
+    st.table(metrics_table)
+
 
 # Streamlit UI
 st.title("Wave Plotting App")
@@ -357,14 +426,14 @@ if uploaded_files:
 
     multiply_y_factor = st.sidebar.number_input("Multiply Y Values by Factor", value=1.0)
 
-    # Frequency and dB level input fields as sliders with discrete options
-    freq = st.sidebar.slider("Select Frequency (Hz)", min_value=min(distinct_freqs), max_value=max(distinct_freqs), value=min(distinct_freqs), step=4000.0)
+    # Frequency dropdown options
+    freq = st.sidebar.selectbox("Select Frequency (Hz)", options=distinct_freqs, index=0)
 
     # dB Level dropdown options
-    db = st.sidebar.slider("Select dB Level", min_value=min(distinct_dbs), max_value=max(distinct_dbs), value=min(distinct_dbs), step=5.0)
+    db = st.sidebar.selectbox("Select dB Level", options=distinct_dbs, index=0)
 
-    y_min = st.sidebar.slider("Y-axis Minimum", -2.5, -0.001)
-    y_max = st.sidebar.slider("Y-axis Maximum", 0.001, 2.5)
+    y_min = st.sidebar.slider("Y-axis Minimum", -2.5, -0.001, value = -2.5)
+    y_max = st.sidebar.slider("Y-axis Maximum", 0.001, 2.5, value = 2.5)
 
     baseline_level_str = st.sidebar.text_input("Set Baseline Level", "0.0")
     baseline_level = float(baseline_level_str)
@@ -374,7 +443,7 @@ if uploaded_files:
     # Create a plotly figure
     fig = go.Figure()
 
-    scatter_plot_option = st.sidebar.checkbox("Plot Waves as Scatter Plot", False)
+    #scatter_plot_option = st.sidebar.checkbox("Plot Waves as Scatter Plot", False)
 
     if st.sidebar.button("Plot Waves at Single Frequency"):
         if plot_time_warped:
@@ -382,7 +451,7 @@ if uploaded_files:
         else:
             fig = plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False)
         st.plotly_chart(fig)
-        display_metrics_table(df, freq, db, baseline_level)
+        display_metrics_table_all_db(df, freq, distinct_dbs, baseline_level)
 
     if st.sidebar.button("Plot Waves at Single dB Level"):
         fig = plot_waves_single_db(df, db, y_min, y_max)
@@ -394,10 +463,10 @@ if uploaded_files:
         st.plotly_chart(fig)
         display_metrics_table(df, freq, db, baseline_level)
     
-    if st.sidebar.button("Plot Waves with Cubic Spline"):
-        fig = plotting_waves_cubic_spline(df, freq, db)
-        fig.update_layout(yaxis_range=[y_min, y_max])
-        st.plotly_chart(fig)
+    #if st.sidebar.button("Plot Waves with Cubic Spline"):
+    #    fig = plotting_waves_cubic_spline(df, freq, db)
+    #    fig.update_layout(yaxis_range=[y_min, y_max])
+    #    st.plotly_chart(fig)
 
     if st.sidebar.button("Plot 3D Surface"):
         fig_3d_surface = plot_3d_surface(df, freq, y_min, y_max)
