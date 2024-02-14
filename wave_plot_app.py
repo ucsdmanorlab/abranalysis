@@ -17,7 +17,7 @@ def plot_scatter_waves(df, freq, db, background_curves=False, smoothing_method='
     
     if not khz.empty:
         index = khz.index.values[0]
-        final = df.iloc[index, 48:]
+        final = df.loc[index, '0':]
         final = pd.to_numeric(final, errors='coerce')
 
         # Find highest peaks separated by at least n data points
@@ -56,7 +56,7 @@ def plotting_waves_cubic_spline(df, freq=16000, db=90, n=45):
     khz = df[df['Freq(Hz)'] == freq]
     dbkhz = khz[khz['Level(dB)'] == db]
     index = dbkhz.index.values[0]
-    original_waveform = df.iloc[index, 48:]
+    original_waveform = df.loc[index, '0':]
     original_waveform = pd.to_numeric(original_waveform, errors='coerce')[:-1]
 
     if multiply_y_factor != 1:
@@ -136,7 +136,7 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
         
         if not khz.empty:
             index = khz.index.values[0]
-            final = df.iloc[index, 48:]
+            final = df.loc[index, '0':]
             final = pd.to_numeric(final, errors='coerce')
 
             if multiply_y_factor != 1:
@@ -174,7 +174,7 @@ def plot_waves_single_db(df, db, y_min, y_max):
         
         if not khz.empty:
             index = khz.index.values[0]
-            final = df.iloc[index, 48:]
+            final = df.loc[index, '0':]
             final = pd.to_numeric(final, errors='coerce')
 
             if multiply_y_factor != 1:
@@ -198,7 +198,7 @@ def plot_waves_single_tuple(df, freq, db, y_min, y_max):
         
         if not khz.empty:
             index = khz.index.values[0]
-            final = df.iloc[index, 48:]
+            final = df.loc[index, '0':]
             final = pd.to_numeric(final, errors='coerce')
 
             time_axis = np.linspace(0, 10, len(final))
@@ -250,7 +250,7 @@ def plot_3d_surface(df, freq, y_min, y_max):
     original_waves = []  # List to store original waves
 
     #wave_colors = ['rgb(255, 0, 0)', 'rgb(255, 128, 128)', 'rgb(255, 191, 191)', 'rgb(255, 224, 224)', 'rgb(255, 240, 240)']
-    wave_colors = [f'rgb(255, {b}, {b})' for b in np.linspace(0, 0, len(db_levels))]
+    wave_colors = [f'rgb(255, 0, 255)' for b in np.linspace(0, 0, len(db_levels))]
     connecting_line_color = 'rgba(0, 255, 0, 0.3)'
 
     for db in db_levels:
@@ -258,7 +258,7 @@ def plot_3d_surface(df, freq, y_min, y_max):
         
         if not khz.empty:
             index = khz.index.values[0]
-            final = df.iloc[index, 48:]
+            final = df.loc[index, '0':]
             final = pd.to_numeric(final, errors='coerce')
 
             if multiply_y_factor != 1:
@@ -296,7 +296,7 @@ def display_metrics_table(df, freq, db, baseline_level):
     khz = df[(df['Freq(Hz)'] == freq) & (df['Level(dB)'] == db)]
     if not khz.empty:
         index = khz.index.values[0]
-        final = df.iloc[index, 48:]
+        final = df.loc[index, '0':]
         final = pd.to_numeric(final, errors='coerce')
 
         if multiply_y_factor != 1:
@@ -349,7 +349,7 @@ def display_metrics_table_all_db(df, freq, db_levels, baseline_level):
         khz = df[(df['Freq(Hz)'] == freq) & (df['Level(dB)'] == db)]
         if not khz.empty:
             index = khz.index.values[0]
-            final = df.iloc[index, 48:]
+            final = df.loc[index, '0':]
             final = pd.to_numeric(final, errors='coerce')
 
             if multiply_y_factor != 1:
