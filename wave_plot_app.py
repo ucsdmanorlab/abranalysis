@@ -8,7 +8,9 @@ import os
 import tempfile
 from scipy.interpolate import CubicSpline
 import plotly.graph_objects as go
-import warnings                               
+import struct
+from datetime import datetime
+import warnings
 warnings.filterwarnings('ignore')
 
 def plot_scatter_waves(df, freq, db, background_curves=False, smoothing_method='None', sigma=3, n=15):
@@ -111,7 +113,6 @@ def plotting_waves_cubic_spline(df, freq=16000, db=90, n=45):
 
     # Show the plot using Streamlit
     return fig
-
 
 def update_title_and_legend_if_single_frequency(fig, selected_freqs):
     if len(set(selected_freqs)) == 1:
@@ -396,11 +397,217 @@ def display_metrics_table_all_db(df, freq, db_levels, baseline_level):
     metrics_table = pd.DataFrame(metrics_data)
     st.table(metrics_table)
 
+def plot_waves_stacked(df, freq, y_min, y_max, plot_time_warped=False):
+    fig = go.Figure()
+
+    # Get unique dB levels
+    unique_dbs = sorted(df['Level(dB)'].unique())
+
+    # Calculate the vertical offset for each waveform
+    num_dbs = len(unique_dbs)
+    vertical_spacing = (y_max - y_min) / num_dbs
+
+    # Initialize an offset for each dB level
+    db_offsets = {db: y_min + i * vertical_spacing for i, db in enumerate(unique_dbs)}
+
+    # Process and plot each waveform
+    for db in sorted(df['Level(dB)'].unique()):
+        khz = df[(df['Freq(Hz)'] == freq) & (df['Level(dB)'] == db)]
+
+        if not khz.empty:
+            index = khz.index.values[0]
+            final = df.loc[index, '0':]
+            final = pd.to_numeric(final, errors='coerce')
+
+            # Apply the vertical offset
+            y_values = final + db_offsets[db]
+
+            # Optionally apply time warping
+            if plot_time_warped:
+                # ... (your time warping code here)
+                pass
+
+            # Plot the waveform
+            fig.add_trace(go.Scatter(x=np.linspace(0, 10, y_values.shape[0]),
+                                     y=y_values,
+                                     mode='lines',
+                                     name=f'dB: {db}',
+                                     line=dict(color='black')))
+
+    fig.update_layout(title=f'{uploaded_files[0].name} - Frequency: {freq} Hz',
+                      xaxis_title='Time (ms)',
+                      yaxis_title='Voltage (mV)')
+    fig.update_layout(yaxis_range=[y_min, y_max])
+    # Set custom width and height (in pixels)
+    custom_width = 400
+    custom_height = 700
+
+    fig.update_layout(width=custom_width, height=custom_height)
+
+    fig.update_layout(yaxis=dict(showticklabels=False, showgrid=False, zeroline=False))
+    fig.update_layout(xaxis=dict(showgrid=False, zeroline=False))
+
+    return fig
+
+def arfread(PATH, **kwargs):
+    # defaults
+    PLOT = kwargs.get('PLOT', False)
+    RP = kwargs.get('RP', False)
+    
+    isRZ = not RP
+    
+    data = {'RecHead': {}, 'groups': []}
+
+    # open file
+    with open(PATH, 'rb') as fid:
+        # open RecHead data
+        data['RecHead']['ftype'] = struct.unpack('h', fid.read(2))[0]
+        data['RecHead']['ngrps'] = struct.unpack('h', fid.read(2))[0]
+        data['RecHead']['nrecs'] = struct.unpack('h', fid.read(2))[0]
+        data['RecHead']['grpseek'] = struct.unpack('200i', fid.read(4*200))
+        data['RecHead']['recseek'] = struct.unpack('2000i', fid.read(4*2000))
+        data['RecHead']['file_ptr'] = struct.unpack('i', fid.read(4))[0]
+
+        data['groups'] = []
+        bFirstPass = True
+        for x in range(data['RecHead']['ngrps']):
+            # jump to the group location in the file
+            fid.seek(data['RecHead']['grpseek'][x], 0)
+
+            # open the group
+            data['groups'].append({
+                'grpn': struct.unpack('h', fid.read(2))[0],
+                'frecn': struct.unpack('h', fid.read(2))[0],
+                'nrecs': struct.unpack('h', fid.read(2))[0],
+                'ID': get_str(fid.read(16)),
+                'ref1': get_str(fid.read(16)),
+                'ref2': get_str(fid.read(16)),
+                'memo': get_str(fid.read(50)),
+            })
+
+            # read temporary timestamp
+            if bFirstPass:
+                if isRZ:
+                    ttt = struct.unpack('q', fid.read(8))[0]
+                    fid.seek(-8, 1)
+                    data['fileType'] = 'BioSigRZ'
+                else:
+                    ttt = struct.unpack('I', fid.read(4))[0]
+                    fid.seek(-4, 1)
+                    data['fileType'] = 'BioSigRP'
+                data['fileTime'] = datetime.utcfromtimestamp(ttt/86400 + datetime(1970, 1, 1).timestamp()).strftime('%Y-%m-%d %H:%M:%S')
+                bFirstPass = False
+
+            if isRZ:
+                data['groups'][x]['beg_t'] = struct.unpack('q', fid.read(8))[0]
+                data['groups'][x]['end_t'] = struct.unpack('q', fid.read(8))[0]
+            else:
+                data['groups'][x]['beg_t'] = struct.unpack('I', fid.read(4))[0]
+                data['groups'][x]['end_t'] = struct.unpack('I', fid.read(4))[0]
+            
+            data['groups'][x].update({
+                'sgfname1': get_str(fid.read(100)),
+                'sgfname2': get_str(fid.read(100)),
+                'VarName1': get_str(fid.read(15)),
+                'VarName2': get_str(fid.read(15)),
+                'VarName3': get_str(fid.read(15)),
+                'VarName4': get_str(fid.read(15)),
+                'VarName5': get_str(fid.read(15)),
+                'VarName6': get_str(fid.read(15)),
+                'VarName7': get_str(fid.read(15)),
+                'VarName8': get_str(fid.read(15)),
+                'VarName9': get_str(fid.read(15)),
+                'VarName10': get_str(fid.read(15)),
+                'VarUnit1': get_str(fid.read(5)),
+                'VarUnit2': get_str(fid.read(5)),
+                'VarUnit3': get_str(fid.read(5)),
+                'VarUnit4': get_str(fid.read(5)),
+                'VarUnit5': get_str(fid.read(5)),
+                'VarUnit6': get_str(fid.read(5)),
+                'VarUnit7': get_str(fid.read(5)),
+                'VarUnit8': get_str(fid.read(5)),
+                'VarUnit9': get_str(fid.read(5)),
+                'VarUnit10': get_str(fid.read(5)),
+                'SampPer_us': struct.unpack('f', fid.read(4))[0],
+                'cc_t': struct.unpack('i', fid.read(4))[0],
+                'version': struct.unpack('h', fid.read(2))[0],
+                'postproc': struct.unpack('i', fid.read(4))[0],
+                'dump': get_str(fid.read(92)),
+                'recs': [],
+            })
+
+            for i in range(data['groups'][x]['nrecs']):
+                record_data = {
+                        'recn': struct.unpack('h', fid.read(2))[0],
+                        'grpid': struct.unpack('h', fid.read(2))[0],
+                        'grp_t': struct.unpack('q' if isRZ else 'I', fid.read(8))[0],
+                        #'grp_d': datetime.utcfromtimestamp(data['groups'][x]['recs'][i]['grp_t']/86400 + datetime(1970, 1, 1).timestamp()).strftime('%Y-%m-%d %H:%M:%S'),
+                        'newgrp': struct.unpack('h', fid.read(2))[0],
+                        'sgi': struct.unpack('h', fid.read(2))[0],
+                        'chan': struct.unpack('B', fid.read(1))[0],
+                        'rtype': get_str(fid.read(1)),
+                        'npts': struct.unpack('H' if isRZ else 'h', fid.read(2))[0],
+                        'osdel': struct.unpack('f', fid.read(4))[0],
+                        'dur_ms': struct.unpack('f', fid.read(4))[0],
+                        'SampPer_us': struct.unpack('f', fid.read(4))[0],
+                        'artthresh': struct.unpack('f', fid.read(4))[0],
+                        'gain': struct.unpack('f', fid.read(4))[0],
+                        'accouple': struct.unpack('h', fid.read(2))[0],
+                        'navgs': struct.unpack('h', fid.read(2))[0],
+                        'narts': struct.unpack('h', fid.read(2))[0],
+                        'beg_t': struct.unpack('q' if isRZ else 'I', fid.read(8))[0],
+                        'end_t': struct.unpack('q' if isRZ else 'I', fid.read(8))[0],
+                        'Var1': struct.unpack('f', fid.read(4))[0],
+                        'Var2': struct.unpack('f', fid.read(4))[0],
+                        'Var3': struct.unpack('f', fid.read(4))[0],
+                        'Var4': struct.unpack('f', fid.read(4))[0],
+                        'Var5': struct.unpack('f', fid.read(4))[0],
+                        'Var6': struct.unpack('f', fid.read(4))[0],
+                        'Var7': struct.unpack('f', fid.read(4))[0],
+                        'Var8': struct.unpack('f', fid.read(4))[0],
+                        'Var9': struct.unpack('f', fid.read(4))[0],
+                        'Var10': struct.unpack('f', fid.read(4))[0],
+                        'data': [] #list(struct.unpack(f'{data["groups"][x]["recs"][i]["npts"]}f', fid.read(4*data['groups'][x]['recs'][i]['npts'])))
+                    }
+                
+                # skip all 10 cursors placeholders
+                fid.seek(36*10, 1)
+                record_data['data'] = list(struct.unpack(f'{record_data["npts"]}f', fid.read(4*record_data['npts'])))
+
+                record_data['grp_d'] = datetime.utcfromtimestamp(record_data['grp_t'] / 86400 + datetime(1970, 1, 1).timestamp()).strftime('%Y-%m-%d %H:%M:%S')
+
+                data['groups'][x]['recs'].append(record_data)
+
+            if PLOT:
+                import matplotlib.pyplot as plt
+
+                # determine reasonable spacing between plots
+                d = [x['data'] for x in data['groups'][x]['recs']]
+                plot_offset = max(max(map(abs, [item for sublist in d for item in sublist]))) * 1.2
+
+                plt.figure()
+
+                for i in range(data['groups'][x]['nrecs']):
+                    plt.plot([item - plot_offset * i for item in data['groups'][x]['recs'][i]['data']])
+                    plt.hold(True)
+
+                plt.title(f'Group {data["groups"][x]["grpn"]}')
+                plt.axis('off')
+                plt.show()
+
+    return data
+
+def get_str(data):
+    # return string up until null character only
+    ind = data.find(b'\x00')
+    if ind > 0:
+        data = data[:ind]
+    return data.decode('utf-8')
 
 # Streamlit UI
 st.title("Wave Plotting App")
-st.sidebar.header("Upload CSV File")
-uploaded_files = st.sidebar.file_uploader("Choose a CSV file", type=["csv"], accept_multiple_files=True)
+st.sidebar.header("Upload File")
+uploaded_files = st.sidebar.file_uploader("Choose a file", type=["csv", "arf"], accept_multiple_files=True)
 
 annotations = []
 
@@ -408,15 +615,43 @@ if uploaded_files:
     dfs = []
     
     for file in uploaded_files:
+        # Use tempfile
         temp_file_path = os.path.join(tempfile.gettempdir(), file.name)
         with open(temp_file_path, 'wb') as temp_file:
             temp_file.write(file.read())
 
-        if pd.read_csv(temp_file_path).shape[1] > 1:
-            df = pd.read_csv(temp_file_path)
-        else:
-            df = pd.read_csv(temp_file_path, skiprows=2)
+        if file.name.endswith(".arf"):
+        # Read ARF file
+            data = arfread(temp_file.name)  
             
+            # Process ARF data
+            rows = []
+            freqs = []
+            dbs = []
+
+            for group in data['groups']:
+                for rec in group['recs']:
+                    # Extract data
+                    freq = rec['Var1']
+                    db = rec['Var2']
+                    
+                    # Construct row  
+                    wave_cols = list(enumerate(rec['data']))
+                    wave_data = {f'{i}':v*1e6 for i, v in wave_cols} 
+                    
+                    row = {'Freq(Hz)': freq, 'Level(dB)': db, **wave_data}
+                    rows.append(row)
+
+            df = pd.DataFrame(rows)
+
+        elif file.name.endswith(".csv"):
+            # Process CSV
+            if pd.read_csv(temp_file_path).shape[1] > 1:
+                df = pd.read_csv(temp_file_path)
+            else:
+                df = pd.read_csv(temp_file_path, skiprows=2)
+            
+        # Append df to list
         dfs.append(df)
 
     # Get distinct frequency and dB level values across all files
@@ -462,6 +697,13 @@ if uploaded_files:
         fig = plot_waves_single_tuple(df, freq, db, y_min, y_max)
         st.plotly_chart(fig)
         display_metrics_table(df, freq, db, baseline_level)
+    
+    if st.sidebar.button("Plot Stacked Waves at Single Frequency"):
+        if plot_time_warped:
+            fig = plot_waves_stacked(df, freq, y_min, y_max, plot_time_warped=True)
+        else:
+            fig = plot_waves_stacked(df, freq, y_min, y_max, plot_time_warped=False)
+        st.plotly_chart(fig)
     
     #if st.sidebar.button("Plot Waves with Cubic Spline"):
     #    fig = plotting_waves_cubic_spline(df, freq, db)
