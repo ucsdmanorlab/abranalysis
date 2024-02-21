@@ -6,3 +6,4 @@ numpy==1.26.3
 scipy==1.10.1
 backports.tempfile==1.0
 scikit-fda
+kneed
