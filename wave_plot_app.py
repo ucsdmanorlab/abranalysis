@@ -131,13 +131,11 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
     fig = go.Figure()
     
     # Get unique dB levels
-    unique_dbs = sorted(df['Level(dB)'].unique())
-
-    wave_colors = [f'rgb(255, {b}, {b})' for b in np.linspace(255, 100, len(unique_dbs))]
+    db_values = []
 
     waves_array = []  # Array to store all waves
 
-    for db in sorted(df['Level(dB)'].unique()):
+    for db in range(0,95,5):
         khz = df[(df['Freq(Hz)'] == freq) & (df['Level(dB)'] == db)]
         
         if not khz.empty:
@@ -150,6 +148,7 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
             else:
                 y_values = final
 
+            db_values.append(db)
             waves_array.append(y_values.to_list())  # Append the current wave to the array
     
     #waves_array = np.array(waves_array)
@@ -162,8 +161,10 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
         obj.srsf_align(parallel=True)
         waves_array = obj.fn.T  # Use the time-warped curves
 
+    wave_colors = [f'rgb(255, {b}, {b})' for b in np.linspace(255, 100, len(db_values))]
+
     # Plot all waves in the array
-    for i, (db, waves) in enumerate(zip(sorted(df['Level(dB)'].unique()), waves_array)):
+    for i, (db, waves) in enumerate(zip(db_values, waves_array)):
         fig.add_trace(go.Scatter(x=np.linspace(0,10, waves_array.shape[1]), y=waves, mode='lines', name=f'dB: {db}', line=dict(color=wave_colors[i])))
 
     fig.update_layout(title=f'{uploaded_files[0].name} - Frequency: {freq} Hz, Predicted Threshold: {calculate_hearing_threshold(df, freq)} dB', xaxis_title='Time (ms)', yaxis_title='Voltage (mV)')
@@ -189,6 +190,12 @@ def plot_waves_single_db(df, db, y_min, y_max):
                 y_values = final
 
             fig.add_trace(go.Scatter(x=np.linspace(0,10, len(y_values)), y=y_values, mode='lines', name=f'Frequency: {freq} Hz'))
+        
+    if plot_time_warped:
+        time = np.linspace(0, 10, waves_array.shape[1])
+        obj = fs.fdawarp(np.array(waves_array).T, time)
+        obj.srsf_align(parallel=True)
+        waves_array = obj.fn.T  # Use the time-warped curves
 
     fig.update_layout(title=f'{uploaded_files[0].name} - dB Level: {db}', xaxis_title='Index', yaxis_title='Voltage (mV)')
     fig.update_layout(annotations=annotations)
@@ -609,11 +616,11 @@ def get_str(data):
     return data.decode('utf-8')
 
 def calculate_hearing_threshold(df, freq):
-    db_values = sorted(df['Level(dB)'].unique())
+    db_values = []
     
     waves_array = []  # Array to store all waves
 
-    for db in sorted(df['Level(dB)'].unique()):
+    for db in range(0,95,5):
         khz = df[(df['Freq(Hz)'] == freq) & (df['Level(dB)'] == db)]
         
         if not khz.empty:
@@ -625,6 +632,7 @@ def calculate_hearing_threshold(df, freq):
                 y_values = final * multiply_y_factor
             else:
                 y_values = final
+            db_values.append(db)
 
             waves_array.append(y_values.to_list())
 
@@ -650,6 +658,7 @@ def calculate_hearing_threshold(df, freq):
     # Create DataFrame with projection results and cluster labels
     df = pd.DataFrame(projection[:, :2], columns=['1st_PC', '2nd_PC'])
     df['Cluster'] = clusters
+    print(clusters)
     df['DB_Value'] = db_values
 
     # Find the minimum hearing threshold value among the outliers
