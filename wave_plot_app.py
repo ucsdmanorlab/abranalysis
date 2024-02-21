@@ -10,6 +10,11 @@ from scipy.interpolate import CubicSpline
 import plotly.graph_objects as go
 import struct
 from datetime import datetime
+from skfda import FDataGrid
+from skfda.preprocessing.dim_reduction import FPCA
+from sklearn.cluster import DBSCAN
+from kneed import KneeLocator
+from sklearn.neighbors import NearestNeighbors
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -161,7 +166,7 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
     for i, (db, waves) in enumerate(zip(sorted(df['Level(dB)'].unique()), waves_array)):
         fig.add_trace(go.Scatter(x=np.linspace(0,10, waves_array.shape[1]), y=waves, mode='lines', name=f'dB: {db}', line=dict(color=wave_colors[i])))
 
-    fig.update_layout(title=f'{uploaded_files[0].name} - Frequency: {freq} Hz', xaxis_title='Time (ms)', yaxis_title='Voltage (mV)')
+    fig.update_layout(title=f'{uploaded_files[0].name} - Frequency: {freq} Hz, Predicted Threshold: {calculate_hearing_threshold(df, freq)} dB', xaxis_title='Time (ms)', yaxis_title='Voltage (mV)')
     fig.update_layout(annotations=annotations)
     fig.update_layout(yaxis_range=[y_min, y_max])
 
@@ -337,10 +342,9 @@ def display_metrics_table(df, freq, db, baseline_level):
                 amplitude_ratio = np.nan
 
             metrics_table = pd.DataFrame({
-                'Metric': ['First Peak Amplitude (mV)', 'Latency to First Peak (ms)', 'Amplitude Ratio (Peak1/Peak4)'],
-                'Value': [first_peak_amplitude, latency_to_first_peak, amplitude_ratio]
+                'Metric': ['First Peak Amplitude (mV)', 'Latency to First Peak (ms)', 'Amplitude Ratio (Peak1/Peak4)', 'Estimated Threshold'],
+                'Value': [first_peak_amplitude, latency_to_first_peak, amplitude_ratio, calculate_hearing_threshold(df, freq)],
             })
-
             st.table(metrics_table)
 
 def display_metrics_table_all_db(df, freq, db_levels, baseline_level):
@@ -603,6 +607,55 @@ def get_str(data):
     if ind > 0:
         data = data[:ind]
     return data.decode('utf-8')
+
+def calculate_hearing_threshold(df, freq):
+    db_values = sorted(df['Level(dB)'].unique())
+    
+    waves_array = []  # Array to store all waves
+
+    for db in sorted(df['Level(dB)'].unique()):
+        khz = df[(df['Freq(Hz)'] == freq) & (df['Level(dB)'] == db)]
+        
+        if not khz.empty:
+            index = khz.index.values[0]
+            final = df.loc[index, '0':]
+            final = pd.to_numeric(final, errors='coerce')
+
+            if multiply_y_factor != 1:
+                y_values = final * multiply_y_factor
+            else:
+                y_values = final
+
+            waves_array.append(y_values.to_list())
+
+    # Filter waves and dB values for the specified frequency
+    waves_fd = FDataGrid(waves_array)
+    fpca_discretized = FPCA(n_components=2)
+    fpca_discretized.fit(waves_fd)
+    projection = fpca_discretized.transform(waves_fd)
+
+    nearest_neighbors = NearestNeighbors(n_neighbors=2)
+    neighbors = nearest_neighbors.fit(projection[:, :2])
+    distances, indices = neighbors.kneighbors(projection[:, :2])
+    distances = np.sort(distances, axis=0)
+    distances = distances[:,1]
+
+    knee_locator = KneeLocator(range(len(distances)), distances, curve='convex', direction='increasing')
+    eps = distances[knee_locator.knee]
+
+    # Apply DBSCAN clustering
+    dbscan = DBSCAN(eps=eps)
+    clusters = dbscan.fit_predict(projection[:, :2])
+
+    # Create DataFrame with projection results and cluster labels
+    df = pd.DataFrame(projection[:, :2], columns=['1st_PC', '2nd_PC'])
+    df['Cluster'] = clusters
+    df['DB_Value'] = db_values
+
+    # Find the minimum hearing threshold value among the outliers
+    min_threshold = np.min(df[df['Cluster']==-1]['DB_Value'])
+
+    return min_threshold
 
 # Streamlit UI
 st.title("Wave Plotting App")
