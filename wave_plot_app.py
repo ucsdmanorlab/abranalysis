@@ -190,12 +190,7 @@ def plot_waves_single_db(df, db, y_min, y_max):
                 y_values = final
 
             fig.add_trace(go.Scatter(x=np.linspace(0,10, len(y_values)), y=y_values, mode='lines', name=f'Frequency: {freq} Hz'))
-        
-    if plot_time_warped:
-        time = np.linspace(0, 10, waves_array.shape[1])
-        obj = fs.fdawarp(np.array(waves_array).T, time)
-        obj.srsf_align(parallel=True)
-        waves_array = obj.fn.T  # Use the time-warped curves
+            
 
     fig.update_layout(title=f'{uploaded_files[0].name} - dB Level: {db}', xaxis_title='Index', yaxis_title='Voltage (mV)')
     fig.update_layout(annotations=annotations)
