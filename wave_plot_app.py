@@ -9,7 +9,7 @@ import tempfile
 from scipy.interpolate import CubicSpline
 import plotly.graph_objects as go
 import struct
-from datetime import datetime
+import datetime
 from skfda import FDataGrid
 from skfda.preprocessing.dim_reduction import FPCA
 from sklearn.cluster import DBSCAN
@@ -35,6 +35,8 @@ def plot_scatter_waves(df, freq, db, background_curves=False, smoothing_method='
             y_values = final * multiply_y_factor
         else:
             y_values = final
+
+        fig.update_layout(width=700, height=450)
 
         # Plot scatter plot instead of line plot
         fig.add_trace(go.Scatter(x=np.arange(len(final)), y=y_values, mode='markers', name='Scatter Plot'))
@@ -163,6 +165,8 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
 
     wave_colors = [f'rgb(255, {b}, {b})' for b in np.linspace(255, 100, len(db_values))]
 
+    fig.update_layout(width=700, height=450)
+
     # Plot all waves in the array
     for i, (db, waves) in enumerate(zip(db_values, waves_array)):
         fig.add_trace(go.Scatter(x=np.linspace(0,10, waves_array.shape[1]), y=waves, mode='lines', name=f'dB: {db}', line=dict(color=wave_colors[i])))
@@ -191,7 +195,7 @@ def plot_waves_single_db(df, db, y_min, y_max):
 
             fig.add_trace(go.Scatter(x=np.linspace(0,10, len(y_values)), y=y_values, mode='lines', name=f'Frequency: {freq} Hz'))
             
-
+    fig.update_layout(width=700, height=450)
     fig.update_layout(title=f'{uploaded_files[0].name} - dB Level: {db}', xaxis_title='Index', yaxis_title='Voltage (mV)')
     fig.update_layout(annotations=annotations)
     fig.update_layout(yaxis_range=[y_min, y_max])
@@ -245,6 +249,7 @@ def plot_waves_single_tuple(df, freq, db, y_min, y_max):
 
             fig.add_trace(go.Scatter(x=time_axis[relevant_troughs], y=y_values[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs'))
 
+    fig.update_layout(width=700, height=450)
     fig.update_layout(title=f'Freq = {freq}, dB = {db}', xaxis_title='Time (ms)', yaxis_title='Voltage (mV)')
     fig.update_layout(annotations=annotations)
     fig.update_layout(yaxis_range=[y_min, y_max])
@@ -254,19 +259,22 @@ def plot_waves_single_tuple(df, freq, db, y_min, y_max):
 def plot_3d_surface(df, freq, y_min, y_max):
     fig = go.Figure()
 
-    db_levels = sorted(df['Level(dB)'].unique())
-    original_waves = []  # List to store original waves
+    # Filter DataFrame to include only data for the specified frequency
+    df_filtered = df[df['Freq(Hz)'] == freq]
 
-    #wave_colors = ['rgb(255, 0, 0)', 'rgb(255, 128, 128)', 'rgb(255, 191, 191)', 'rgb(255, 224, 224)', 'rgb(255, 240, 240)']
+    # Get unique dB levels for the filtered DataFrame
+    db_levels = sorted(df_filtered['Level(dB)'].unique())
+
+    original_waves = []  # List to store original waves
     wave_colors = [f'rgb(255, 0, 255)' for b in np.linspace(0, 0, len(db_levels))]
     connecting_line_color = 'rgba(0, 255, 0, 0.3)'
 
     for db in db_levels:
-        khz = df[(df['Freq(Hz)'] == freq) & (df['Level(dB)'] == db)]
+        khz = df_filtered[df_filtered['Level(dB)'] == db]
         
         if not khz.empty:
             index = khz.index.values[0]
-            final = df.loc[index, '0':]
+            final = df_filtered.loc[index, '0':]
             final = pd.to_numeric(final, errors='coerce')
 
             if multiply_y_factor != 1:
@@ -274,7 +282,7 @@ def plot_3d_surface(df, freq, y_min, y_max):
             else:
                 y_values = final
 
-            original_waves.append(y_values.to_list())  # Append the current wave to the list
+            original_waves.append(y_values.to_list()) 
 
     # Convert original waves to a 2D numpy array
     original_waves_array = np.array([wave[:-1] for wave in original_waves])
@@ -294,6 +302,7 @@ def plot_3d_surface(df, freq, y_min, y_max):
         z_values_at_time = [warped_waves_array[j, i] for j in range(len(db_levels))]
         fig.add_trace(go.Scatter3d(x=db_levels, y=[time[i]] * len(db_levels), z=z_values_at_time, mode='lines', name=f'Time: {time[i]:.2f} ms', line=dict(color=connecting_line_color)))
 
+    fig.update_layout(width=700, height=450)
     fig.update_layout(title=f'{uploaded_files[0].name} - Frequency: {freq} Hz', scene=dict(xaxis_title='dB Level', yaxis_title='Time (ms)', zaxis_title='Voltage (mV)'))
     fig.update_layout(annotations=annotations)
     fig.update_layout(scene=dict(zaxis=dict(range=[y_min, y_max])))
@@ -368,8 +377,8 @@ def display_metrics_table_all_db(df, freq, db_levels, baseline_level):
             y_values -= baseline_level
 
             # Find highest peaks separated by at least n data points
-            peaks, _ = find_peaks(y_values, distance=15)
-            troughs, _ = find_peaks(-y_values, distance=15)
+            peaks, _ = find_peaks(y_values, distance=int((15/243)*len(y_values)))
+            troughs, _ = find_peaks(-y_values, distance=int((15/243)*len(y_values)))
             highest_peaks = peaks[np.argsort(final[peaks])[-5:]]
             highest_peaks = np.sort(highest_peaks)
             relevant_troughs = np.array([])
@@ -501,16 +510,23 @@ def arfread(PATH, **kwargs):
                     ttt = struct.unpack('I', fid.read(4))[0]
                     fid.seek(-4, 1)
                     data['fileType'] = 'BioSigRP'
-                data['fileTime'] = datetime.utcfromtimestamp(ttt/86400 + datetime(1970, 1, 1).timestamp()).strftime('%Y-%m-%d %H:%M:%S')
+                data['fileTime'] = datetime.datetime.utcfromtimestamp(ttt/86400 + datetime.datetime(1970, 1, 1).timestamp()).strftime('%Y-%m-%d %H:%M:%S')
                 bFirstPass = False
 
             if isRZ:
-                data['groups'][x]['beg_t'] = struct.unpack('q', fid.read(8))[0]
-                data['groups'][x]['end_t'] = struct.unpack('q', fid.read(8))[0]
+                grp_t_format = 'q'
+                beg_t_format = 'q'
+                end_t_format = 'q'
+                read_size = 8
             else:
-                data['groups'][x]['beg_t'] = struct.unpack('I', fid.read(4))[0]
-                data['groups'][x]['end_t'] = struct.unpack('I', fid.read(4))[0]
-            
+                grp_t_format = 'I'
+                beg_t_format = 'I'
+                end_t_format = 'I'
+                read_size = 4
+
+            data['groups'][x]['beg_t'] = struct.unpack(beg_t_format, fid.read(read_size))[0]
+            data['groups'][x]['end_t'] = struct.unpack(end_t_format, fid.read(read_size))[0]
+
             data['groups'][x].update({
                 'sgfname1': get_str(fid.read(100)),
                 'sgfname2': get_str(fid.read(100)),
@@ -546,7 +562,7 @@ def arfread(PATH, **kwargs):
                 record_data = {
                         'recn': struct.unpack('h', fid.read(2))[0],
                         'grpid': struct.unpack('h', fid.read(2))[0],
-                        'grp_t': struct.unpack('q' if isRZ else 'I', fid.read(8))[0],
+                        'grp_t': struct.unpack(grp_t_format, fid.read(read_size))[0],
                         #'grp_d': datetime.utcfromtimestamp(data['groups'][x]['recs'][i]['grp_t']/86400 + datetime(1970, 1, 1).timestamp()).strftime('%Y-%m-%d %H:%M:%S'),
                         'newgrp': struct.unpack('h', fid.read(2))[0],
                         'sgi': struct.unpack('h', fid.read(2))[0],
@@ -561,8 +577,8 @@ def arfread(PATH, **kwargs):
                         'accouple': struct.unpack('h', fid.read(2))[0],
                         'navgs': struct.unpack('h', fid.read(2))[0],
                         'narts': struct.unpack('h', fid.read(2))[0],
-                        'beg_t': struct.unpack('q' if isRZ else 'I', fid.read(8))[0],
-                        'end_t': struct.unpack('q' if isRZ else 'I', fid.read(8))[0],
+                        'beg_t': struct.unpack(beg_t_format, fid.read(read_size))[0],
+                        'end_t': struct.unpack(end_t_format, fid.read(read_size))[0],
                         'Var1': struct.unpack('f', fid.read(4))[0],
                         'Var2': struct.unpack('f', fid.read(4))[0],
                         'Var3': struct.unpack('f', fid.read(4))[0],
@@ -580,7 +596,7 @@ def arfread(PATH, **kwargs):
                 fid.seek(36*10, 1)
                 record_data['data'] = list(struct.unpack(f'{record_data["npts"]}f', fid.read(4*record_data['npts'])))
 
-                record_data['grp_d'] = datetime.utcfromtimestamp(record_data['grp_t'] / 86400 + datetime(1970, 1, 1).timestamp()).strftime('%Y-%m-%d %H:%M:%S')
+                record_data['grp_d'] = datetime.datetime.utcfromtimestamp(record_data['grp_t'] / 86400 + datetime.datetime(1970, 1, 1).timestamp()).strftime('%Y-%m-%d %H:%M:%S')
 
                 data['groups'][x]['recs'].append(record_data)
 
@@ -664,6 +680,7 @@ def calculate_hearing_threshold(df, freq):
 # Streamlit UI
 st.title("Wave Plotting App")
 st.sidebar.header("Upload File")
+is_rz_file = st.sidebar.radio("Select ARF File Type:", ("RP", "RZ"))
 uploaded_files = st.sidebar.file_uploader("Choose a file", type=["csv", "arf"], accept_multiple_files=True)
 
 annotations = []
@@ -679,7 +696,10 @@ if uploaded_files:
 
         if file.name.endswith(".arf"):
         # Read ARF file
-            data = arfread(temp_file.name)  
+            if is_rz_file == 'RP':
+                data = arfread(temp_file.name, RP=True) 
+            else:
+                data = arfread(temp_file.name) 
             
             # Process ARF data
             rows = []
