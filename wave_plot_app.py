@@ -15,6 +15,7 @@ from skfda.preprocessing.dim_reduction import FPCA
 from sklearn.cluster import DBSCAN
 from kneed import KneeLocator
 from sklearn.neighbors import NearestNeighbors
+from scipy.ndimage import gaussian_filter1d
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -135,8 +136,19 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
 
     waves_array = []  # Array to store all waves
 
+    if level:
+        d = 'Level(dB)'
+    else:
+        d = 'PostAtten(dB)'
+    
+    if len(selected_dfs) > 1:
+        st.write("Can only process one file at a time.")
+        return
+    else:
+        df = selected_dfs[0]
+
     for db in range(0,95,5):
-        khz = df[(df['Freq(Hz)'] == freq) & (df['Level(dB)'] == db)]
+        khz = df[(df['Freq(Hz)'] == freq) & (df[d] == db)]
         
         if not khz.empty:
             index = khz.index.values[0]
@@ -169,7 +181,10 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
     for i, (db, waves) in enumerate(zip(db_values, waves_array)):
         fig.add_trace(go.Scatter(x=np.linspace(0,10, waves_array.shape[1]), y=waves, mode='lines', name=f'dB: {db}', line=dict(color=wave_colors[i])))
 
-    fig.update_layout(title=f'{uploaded_files[0].name} - Frequency: {freq} Hz, Predicted Threshold: {calculate_hearing_threshold(df, freq)} dB', xaxis_title='Time (ms)', yaxis_title='Voltage (mV)')
+    if level:
+        fig.update_layout(title=f'{selected_files[0].split("/")[-1]} - Frequency: {freq} Hz, Predicted Threshold: {calculate_hearing_threshold(df, freq)} dB', xaxis_title='Time (ms)', yaxis_title='Voltage (mV)')
+    else:
+        fig.update_layout(title=f'{selected_files[0].split("/")[-1]} - Frequency: {freq} Hz', xaxis_title='Time (ms)', yaxis_title='Voltage (mV)')
     fig.update_layout(annotations=annotations)
     fig.update_layout(yaxis_range=[y_min, y_max])
 
@@ -178,8 +193,19 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
 def plot_waves_single_db(df, db, y_min, y_max):
     fig = go.Figure()
 
+    if level:
+        d = 'Level(dB)'
+    else:
+        d = 'PostAtten(dB)'
+    
+    if len(selected_dfs) > 1:
+        st.write("Can only process one file at a time.")
+        return
+    else:
+        df = selected_dfs[0]
+
     for freq in sorted(df['Freq(Hz)'].unique()):
-        khz = df[(df['Freq(Hz)'] == freq) & (df['Level(dB)'] == db)]
+        khz = df[(df['Freq(Hz)'] == freq) & (df[d] == db)]
         
         if not khz.empty:
             index = khz.index.values[0]
@@ -194,7 +220,7 @@ def plot_waves_single_db(df, db, y_min, y_max):
             fig.add_trace(go.Scatter(x=np.linspace(0,10, len(y_values)), y=y_values, mode='lines', name=f'Frequency: {freq} Hz'))
             
     fig.update_layout(width=700, height=450)
-    fig.update_layout(title=f'{uploaded_files[0].name} - dB Level: {db}', xaxis_title='Index', yaxis_title='Voltage (mV)')
+    fig.update_layout(title=f'{selected_files[0].split("/")[-1]} - dB Level: {db}', xaxis_title='Index', yaxis_title='Voltage (mV)')
     fig.update_layout(annotations=annotations)
     fig.update_layout(yaxis_range=[y_min, y_max])
 
@@ -203,8 +229,13 @@ def plot_waves_single_db(df, db, y_min, y_max):
 def plot_waves_single_tuple(df, freq, db, y_min, y_max):
     fig = go.Figure()
     i=0
-    for df in dfs:
-        khz = df[(df['Freq(Hz)'] == freq) & (df['Level(dB)'] == db)]
+    if level:
+        d = 'Level(dB)'
+    else:
+        d = 'PostAtten(dB)'
+    
+    for df in selected_dfs:
+        khz = df[(df['Freq(Hz)'] == freq) & (df[d] == db)]
         
         if not khz.empty:
             index = khz.index.values[0]
@@ -247,14 +278,15 @@ def plot_waves_single_tuple(df, freq, db, y_min, y_max):
                             break
             relevant_troughs = relevant_troughs.astype('i')
 
-            fig.add_trace(go.Scatter(x=np.linspace(0,10, len(y_values)), y=y_values, mode='lines', name=f'{uploaded_files[i].name}'))
-            i+=1
+            fig.add_trace(go.Scatter(x=np.linspace(0,10, len(y_values)), y=y_values, mode='lines', name=f'{selected_files[i].split("/")[-1]}'))
 
             # Mark the highest peaks with red markers
             fig.add_trace(go.Scatter(x=np.linspace(0,10,len(smooth_time))[highest_peaks], y=smooth_amplitude[highest_peaks], mode='markers', marker=dict(color='red'), name='Peaks'))
 
             # Mark the relevant troughs with blue markers
             fig.add_trace(go.Scatter(x=np.linspace(0,10,len(smooth_time))[relevant_troughs], y=smooth_amplitude[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs'))
+
+            i+=1
 
     fig.update_layout(width=700, height=450)
     fig.update_layout(title=f'Freq = {freq}, dB = {db}', xaxis_title='Time (ms)', yaxis_title='Voltage (mV)')
@@ -263,8 +295,59 @@ def plot_waves_single_tuple(df, freq, db, y_min, y_max):
 
     return fig
 
+def plotting_waves_gauss(df, freq, db, n=15, sigma=3):
+    fig = go.Figure()
+
+    if level:
+        d = 'Level(dB)'
+    else:
+        d = 'PostAtten(dB)'
+
+    for df in selected_dfs:
+        khz = df[df['Freq(Hz)'] == freq]
+        dbkhz = khz[khz[d] == db]
+        if not dbkhz.empty:
+            index = dbkhz.index.values[0]
+            original_waveform = df.loc[index, '0':]
+            original_waveform = pd.to_numeric(original_waveform, errors='coerce')
+
+            # Apply Gaussian smoothing to the original ABR waveform
+            smoothed_waveform = gaussian_filter1d(original_waveform, sigma=sigma)
+
+            # Find highest peaks separated by at least n data points in the original curve
+            original_peaks, _ = find_peaks(original_waveform, distance=n)
+            highest_original_peaks = original_peaks[np.argsort(original_waveform[original_peaks])[-5:]]
+
+            # Find highest peaks separated by at least n data points in the smoothed curve
+            smoothed_peaks, _ = find_peaks(smoothed_waveform, distance=n)
+            highest_smoothed_peaks = smoothed_peaks[np.argsort(smoothed_waveform[smoothed_peaks])[-5:]]
+
+            # Plot the original ABR waveform
+            fig.add_trace(go.Scatter(x=np.arange(len(original_waveform)), y=original_waveform, mode='lines', name='Original ABR'))
+
+            # Plot the smoothed ABR waveform
+            fig.add_trace(go.Scatter(x=np.arange(len(smoothed_waveform)), y=smoothed_waveform, mode='lines', name=f'Gaussian Smoothed (sigma={sigma})'))
+
+            if highest_original_peaks.size > 0:  # Check if highest_original_peaks is not empty
+                first_original_peak = np.sort(highest_original_peaks)[0]
+                fig.add_trace(go.Scatter(x=[first_original_peak], y=[original_waveform[first_original_peak]], mode='markers', marker=dict(color='red'), name='Original Peaks'))
+
+            if highest_smoothed_peaks.size > 0:  # Check if highest_smoothed_peaks is not empty
+                first_smoothed_peak = np.sort(highest_smoothed_peaks)[0]
+                fig.add_trace(go.Scatter(x=[first_smoothed_peak], y=[smoothed_waveform[first_smoothed_peak]], mode='markers', marker=dict(color='blue'), name='Smoothed Peaks'))
+
+    #fig.update_layout(title=f'Sheet: {filename}', xaxis_title='Index', yaxis_title='Voltage (mV)', legend=dict(x=0, y=1, traceorder='normal'))
+
+    return fig
+
 def plot_3d_surface(df, freq, y_min, y_max):
     fig = go.Figure()
+
+    if len(selected_dfs) > 1:
+        st.write("Can only process one file at a time.")
+        return
+    else:
+        df = selected_dfs[0]
 
     # Filter DataFrame to include only data for the specified frequency
     df_filtered = df[df['Freq(Hz)'] == freq]
@@ -315,14 +398,19 @@ def plot_3d_surface(df, freq, y_min, y_max):
         fig.add_trace(go.Scatter3d(x=db_levels, y=[time[i]] * len(db_levels), z=z_values_at_time, mode='lines', name=f'Time: {time[i]:.2f} ms', line=dict(color=connecting_line_color)))
 
     fig.update_layout(width=700, height=450)
-    fig.update_layout(title=f'{uploaded_files[0].name} - Frequency: {freq} Hz', scene=dict(xaxis_title=f'dB {is_level}', yaxis_title='Time (ms)', zaxis_title='Voltage (mV)'))
+    fig.update_layout(title=f'{selected_files[0].split("/")[-1]} - Frequency: {freq} Hz', scene=dict(xaxis_title=f'dB {is_level}', yaxis_title='Time (ms)', zaxis_title='Voltage (mV)'))
     fig.update_layout(annotations=annotations)
     fig.update_layout(scene=dict(zaxis=dict(range=[y_min, y_max])))
 
     return fig
 
 def display_metrics_table(df, freq, db, baseline_level):
-    khz = df[(df['Freq(Hz)'] == freq) & (df['Level(dB)'] == db)]
+    if level:
+        d = 'Level(dB)'
+    else:
+        d = 'PostAtten(dB)'
+
+    khz = df[(df['Freq(Hz)'] == freq) & (df[d] == db)]
     if not khz.empty:
         index = khz.index.values[0]
         final = df.loc[index, '0':]
@@ -368,13 +456,18 @@ def display_metrics_table(df, freq, db, baseline_level):
                 'Metric': ['First Peak Amplitude (mV)', 'Latency to First Peak (ms)', 'Amplitude Ratio (Peak1/Peak4)', 'Estimated Threshold'],
                 'Value': [first_peak_amplitude, latency_to_first_peak, amplitude_ratio, calculate_hearing_threshold(df, freq)],
             })
-            st.table(metrics_table)
+            #st.table(metrics_table)
+        return metrics_table
 
 def display_metrics_table_all_db(df, freq, db_levels, baseline_level):
+    if level:
+        d = 'Level(dB)'
+    else:
+        d = 'PostAtten(dB)'
     metrics_data = {'dB Level': [], 'First Peak Amplitude (mV)': [], 'Latency to First Peak (ms)': [], 'Amplitude Ratio (Peak1/Peak4)': []}
     
     for db in db_levels:
-        khz = df[(df['Freq(Hz)'] == freq) & (df['Level(dB)'] == db)]
+        khz = df[(df['Freq(Hz)'] == freq) & (df[d] == db)]
         if not khz.empty:
             index = khz.index.values[0]
             final = df.loc[index, '0':]
@@ -703,14 +796,22 @@ is_level = st.sidebar.radio("Select dB You Are Studying:", ("Attenuation", "Leve
 
 annotations = []
 
+
 if uploaded_files:
     dfs = []
+    selected_files = []
+    selected_dfs = []
     
-    for file in uploaded_files:
+    for idx, file in enumerate(uploaded_files):
         # Use tempfile
         temp_file_path = os.path.join(tempfile.gettempdir(), file.name)
         with open(temp_file_path, 'wb') as temp_file:
             temp_file.write(file.read())
+        #st.sidebar.markdown(f"**File Name:** {file.name}")
+        selected = st.sidebar.checkbox(f"{file.name}", key=f"file_{idx}")
+        
+        if selected:
+            selected_files.append(temp_file_path)
 
         if file.name.endswith(".arf"):
         # Read ARF file
@@ -752,6 +853,8 @@ if uploaded_files:
             
         # Append df to list
         dfs.append(df)
+        if temp_file_path in selected_files:
+            selected_dfs.append(df)
 
     level = (is_level == 'Level')
 
@@ -797,7 +900,15 @@ if uploaded_files:
     if st.sidebar.button("Plot Waves at Single Tuple (Frequency, dB)"):
         fig = plot_waves_single_tuple(df, freq, db, y_min, y_max)
         st.plotly_chart(fig)
-        display_metrics_table(df, freq, db, baseline_level)
+        metrics_df = display_metrics_table(df, freq, db, baseline_level)
+        if metrics_df is not None:
+            st.table(metrics_df)
+        if st.button("Download metrics"):
+            csv = metrics_df.to_csv(index=False)
+            b64 = base64.b64encode(csv.encode()).decode()  # Some strings
+            link = f'<a href="data:file/csv;base64,{b64}" download="metrics_table.csv">Download Metrics Table CSV</a>'
+            st.markdown(link, unsafe_allow_html=True)
+
     
     if st.sidebar.button("Plot Stacked Waves at Single Frequency"):
         if plot_time_warped:
@@ -814,5 +925,9 @@ if uploaded_files:
     if st.sidebar.button("Plot 3D Surface"):
         fig_3d_surface = plot_3d_surface(df, freq, y_min, y_max)
         st.plotly_chart(fig_3d_surface)
+    
+    if st.sidebar.button("Plot Waves with Gaussian Smoothing"):
+        fig_gauss = plotting_waves_gauss(dfs, freq, db)
+        st.plotly_chart(fig_gauss)
     
     #st.markdown(get_download_link(fig), unsafe_allow_html=True)
