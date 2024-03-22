@@ -917,17 +917,17 @@ if uploaded_files:
             fig = plot_waves_stacked(df, freq, y_min, y_max, plot_time_warped=False)
         st.plotly_chart(fig)
     
-    if st.sidebar.button("Plot Waves with Cubic Spline"):
-        fig = plotting_waves_cubic_spline(df, freq, db)
-        fig.update_layout(yaxis_range=[y_min, y_max])
-        st.plotly_chart(fig)
+    #if st.sidebar.button("Plot Waves with Cubic Spline"):
+    #    fig = plotting_waves_cubic_spline(df, freq, db)
+    #    fig.update_layout(yaxis_range=[y_min, y_max])
+    #    st.plotly_chart(fig)
 
     if st.sidebar.button("Plot 3D Surface"):
         fig_3d_surface = plot_3d_surface(df, freq, y_min, y_max)
         st.plotly_chart(fig_3d_surface)
     
-    if st.sidebar.button("Plot Waves with Gaussian Smoothing"):
-        fig_gauss = plotting_waves_gauss(dfs, freq, db)
-        st.plotly_chart(fig_gauss)
+    #if st.sidebar.button("Plot Waves with Gaussian Smoothing"):
+    #    fig_gauss = plotting_waves_gauss(dfs, freq, db)
+    #    st.plotly_chart(fig_gauss)
     
     #st.markdown(get_download_link(fig), unsafe_allow_html=True)
