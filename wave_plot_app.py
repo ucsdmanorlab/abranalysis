@@ -129,66 +129,45 @@ def update_title_and_legend_if_single_frequency(fig, selected_freqs):
     return fig
 
 def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
-    fig = go.Figure()
-    
-    # Get unique dB levels
-    db_values = []
-
-    waves_array = []  # Array to store all waves
-
     if level:
-        d = 'Level(dB)'
+        db_column = 'Level(dB)'
     else:
-        d = 'PostAtten(dB)'
-    
-    if len(selected_dfs) > 1:
-        st.write("Can only process one file at a time.")
+        db_column = 'PostAtten(dB)'
+
+    if len(selected_dfs) == 0:
+        st.write("No files selected.")
         return
-    else:
-        df = selected_dfs[0]
 
-    for db in range(0,95,5):
-        khz = df[(df['Freq(Hz)'] == freq) & (df[d] == db)]
-        
-        if not khz.empty:
-            index = khz.index.values[0]
-            final = df.loc[index, '0':].dropna()
-            final = pd.to_numeric(final, errors='coerce')
+    for idx, file_df in enumerate(selected_dfs):
+        fig = go.Figure()
 
-            if multiply_y_factor != 1:
-                y_values = final * multiply_y_factor
-            else:
-                y_values = final
+        for db in sorted(file_df[db_column].unique()):
+            khz = file_df[(file_df['Freq(Hz)'] == freq) & (file_df[db_column] == db)]
 
-            db_values.append(db)
-            waves_array.append(y_values.to_list())  # Append the current wave to the array
-    
-    #waves_array = np.array(waves_array)
-    waves_array = np.array([wave[:-1] for wave in waves_array])
-    
-    # Optionally apply time warping to all waves in the array
-    if plot_time_warped:
-        time = np.linspace(0, 10, waves_array.shape[1])
-        obj = fs.fdawarp(np.array(waves_array).T, time)
-        obj.srsf_align(parallel=True)
-        waves_array = obj.fn.T  # Use the time-warped curves
+            if not khz.empty:
+                index = khz.index.values[0]
+                final = file_df.loc[index, '0':].dropna()
+                final = pd.to_numeric(final, errors='coerce')
 
-    wave_colors = [f'rgb(255, {b}, {b})' for b in np.linspace(255, 100, len(db_values))]
+                if multiply_y_factor != 1:
+                    y_values = final * multiply_y_factor
+                else:
+                    y_values = final
 
-    fig.update_layout(width=700, height=450)
+                if plot_time_warped:
+                    time = np.linspace(0, 10, len(y_values))
+                    # Apply time warping
+                    obj = fs.fdawarp(np.array(y_values).reshape(-1, 1), time)
+                    obj.srsf_align(parallel=True)
+                    y_values = obj.fn.T.squeeze()
 
-    # Plot all waves in the array
-    for i, (db, waves) in enumerate(zip(db_values, waves_array)):
-        fig.add_trace(go.Scatter(x=np.linspace(0,10, waves_array.shape[1]), y=waves, mode='lines', name=f'dB: {db}', line=dict(color=wave_colors[i])))
+                fig.add_trace(go.Scatter(x=np.linspace(0, 10, len(y_values)), y=y_values, mode='lines', name=f'dB: {db}'))
 
-    if level:
-        fig.update_layout(title=f'{selected_files[0].split("/")[-1]} - Frequency: {freq} Hz, Predicted Threshold: {calculate_hearing_threshold(df, freq)} dB', xaxis_title='Time (ms)', yaxis_title='Voltage (mV)')
-    else:
-        fig.update_layout(title=f'{selected_files[0].split("/")[-1]} - Frequency: {freq} Hz', xaxis_title='Time (ms)', yaxis_title='Voltage (mV)')
-    fig.update_layout(annotations=annotations)
-    fig.update_layout(yaxis_range=[y_min, y_max])
+        fig.update_layout(title=f'{selected_files[idx].split("/")[-1]} - Frequency: {freq} Hz', xaxis_title='Time (ms)', yaxis_title='Voltage (mV)')
+        fig.update_layout(annotations=annotations)
+        fig.update_layout(yaxis_range=[y_min, y_max])
 
-    return fig
+        st.plotly_chart(fig)
 
 def plot_waves_single_db(df, db, y_min, y_max):
     fig = go.Figure()
@@ -251,24 +230,25 @@ def plot_waves_single_tuple(df, freq, db, y_min, y_max):
             else:
                 y_values = final
             
-            smooth_time = np.linspace(0, len(y_values) - 1, 244)
-            cs = CubicSpline(np.arange(len(y_values)), y_values)
-            smooth_amplitude = cs(smooth_time)
+            # Apply Gaussian smoothing to the original ABR waveform
+            smoothed_waveform = gaussian_filter1d(y_values, sigma=1.8125)
 
             # Find highest peaks separated by at least n data points in the smoothed curve
-            n = 15
-            peaks, _ = find_peaks(smooth_amplitude, distance=n)
-            troughs, _ = find_peaks(-smooth_amplitude, distance=n)
-            highest_peaks = peaks[np.argsort(smooth_amplitude[peaks])[-5:]]
-            highest_peaks = np.sort(highest_peaks)
+            n = 20
+            # Find highest peaks separated by at least n data points in the smoothed curve
+            smoothed_peaks, _ = find_peaks(smoothed_waveform[26:], distance=n)
+            smoothed_troughs, _ = find_peaks(-smoothed_waveform, distance=n)
+            sorted_indices = np.argsort(smoothed_waveform[smoothed_peaks+26])
+            # Get the indices of the highest peaks (top 5 in this case)
+            highest_smoothed_peaks = smoothed_peaks[sorted_indices[-5:]] + 26
             relevant_troughs = np.array([])
-            for p in range(len(highest_peaks)):
+            for p in range(len(highest_smoothed_peaks)):
                 c = 0
-                for t in troughs:
-                    if t > highest_peaks[p]:
+                for t in smoothed_troughs:
+                    if t > highest_smoothed_peaks[p]:
                         if p != 4:
                             try:
-                                if t < highest_peaks[p+1]:
+                                if t < highest_smoothed_peaks[p+1]:
                                     relevant_troughs = np.append(relevant_troughs, int(t))
                                     break
                             except IndexError:
@@ -281,10 +261,10 @@ def plot_waves_single_tuple(df, freq, db, y_min, y_max):
             fig.add_trace(go.Scatter(x=np.linspace(0,10, len(y_values)), y=y_values, mode='lines', name=f'{selected_files[i].split("/")[-1]}'))
 
             # Mark the highest peaks with red markers
-            fig.add_trace(go.Scatter(x=np.linspace(0,10,len(smooth_time))[highest_peaks], y=smooth_amplitude[highest_peaks], mode='markers', marker=dict(color='red'), name='Peaks'))
+            fig.add_trace(go.Scatter(x=np.linspace(0,10,len(y_values))[highest_smoothed_peaks], y=y_values[highest_smoothed_peaks], mode='markers', marker=dict(color='red'), name='Peaks'))
 
             # Mark the relevant troughs with blue markers
-            fig.add_trace(go.Scatter(x=np.linspace(0,10,len(smooth_time))[relevant_troughs], y=smooth_amplitude[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs'))
+            fig.add_trace(go.Scatter(x=np.linspace(0,10,len(y_values))[relevant_troughs], y=y_values[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs'))
 
             i+=1
 
@@ -459,60 +439,65 @@ def display_metrics_table(df, freq, db, baseline_level):
             #st.table(metrics_table)
         return metrics_table
 
-def display_metrics_table_all_db(df, freq, db_levels, baseline_level):
+def display_metrics_table_all_db(selected_dfs, freq, db_levels, baseline_level, level=True, multiply_y_factor=1):
     if level:
-        d = 'Level(dB)'
+        db_column = 'Level(dB)'
     else:
-        d = 'PostAtten(dB)'
-    metrics_data = {'dB Level': [], 'First Peak Amplitude (mV)': [], 'Latency to First Peak (ms)': [], 'Amplitude Ratio (Peak1/Peak4)': []}
-    
-    for db in db_levels:
-        khz = df[(df['Freq(Hz)'] == freq) & (df[d] == db)]
-        if not khz.empty:
-            index = khz.index.values[0]
-            final = df.loc[index, '0':]
-            final = pd.to_numeric(final, errors='coerce')
+        db_column = 'PostAtten(dB)'
+        
+    metrics_data = {'File Name': [], 'Frequency (Hz)': [], 'dB Level': [], 'First Peak Amplitude (mV)': [], 'Latency to First Peak (ms)': [], 'Amplitude Ratio (Peak1/Peak4)': []}
 
-            if multiply_y_factor != 1:
-                y_values = final * multiply_y_factor
-            else:
-                y_values = final
-            
-            # Adjust the waveform by subtracting the baseline level
-            y_values -= baseline_level
+    for file_df, file_name in zip(selected_dfs, selected_files):
+        for db in db_levels:
+            khz = file_df[(file_df['Freq(Hz)'] == freq) & (file_df[db_column] == db)]
+            if not khz.empty:
+                index = khz.index.values[0]
+                final = file_df.loc[index, '0':]
+                final = pd.to_numeric(final, errors='coerce')
 
-            # Find highest peaks separated by at least n data points
-            peaks, _ = find_peaks(y_values, distance=int((15/243)*len(y_values)))
-            troughs, _ = find_peaks(-y_values, distance=int((15/243)*len(y_values)))
-            highest_peaks = peaks[np.argsort(final[peaks])[-5:]]
-            highest_peaks = np.sort(highest_peaks)
-            relevant_troughs = np.array([])
-            for p in range(len(highest_peaks)):
-                c = 0
-                for t in troughs:
-                    if t > highest_peaks[p]:
-                        if p != 4:
-                            if t < highest_peaks[p+1]:
+                if multiply_y_factor != 1:
+                    y_values = final * multiply_y_factor
+                else:
+                    y_values = final
+
+                # Adjust the waveform by subtracting the baseline level
+                y_values -= baseline_level
+
+                # Find highest peaks separated by at least n data points
+                peaks, _ = find_peaks(y_values, distance=int((15 / 243) * len(y_values)))
+                troughs, _ = find_peaks(-y_values, distance=int((15 / 243) * len(y_values)))
+                highest_peaks = peaks[np.argsort(final[peaks])[-5:]]
+                highest_peaks = np.sort(highest_peaks)
+                relevant_troughs = np.array([])
+                for p in range(len(highest_peaks)):
+                    c = 0
+                    for t in troughs:
+                        if t > highest_peaks[p]:
+                            if p != 4:
+                                if t < highest_peaks[p + 1]:
+                                    relevant_troughs = np.append(relevant_troughs, int(t))
+                                    break
+                            else:
                                 relevant_troughs = np.append(relevant_troughs, int(t))
                                 break
-                        else:
-                            relevant_troughs = np.append(relevant_troughs, int(t))
-                            break
-            relevant_troughs = relevant_troughs.astype('i')
+                relevant_troughs = relevant_troughs.astype('i')
 
-            if highest_peaks.size > 0:  # Check if highest_peaks is not empty
-                first_peak_amplitude = y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]
-                latency_to_first_peak = highest_peaks[0] * (10 / len(y_values))  # Assuming 10 ms duration for waveform
+                if highest_peaks.size > 0:  # Check if highest_peaks is not empty
+                    first_peak_amplitude = y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]
+                    latency_to_first_peak = highest_peaks[0] * (10 / len(y_values))  # Assuming 10 ms duration for waveform
 
-                if len(highest_peaks) >= 4:
-                    amplitude_ratio = (y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]) / (y_values[highest_peaks[3]] - y_values[relevant_troughs[3]])
-                else:
-                    amplitude_ratio = np.nan
+                    if len(highest_peaks) >= 4 and len(relevant_troughs) >= 4:
+                        amplitude_ratio = (y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]) / (
+                                    y_values[highest_peaks[3]] - y_values[relevant_troughs[3]])
+                    else:
+                        amplitude_ratio = np.nan
 
-                metrics_data['dB Level'].append(db)
-                metrics_data['First Peak Amplitude (mV)'].append(first_peak_amplitude)
-                metrics_data['Latency to First Peak (ms)'].append(latency_to_first_peak)
-                metrics_data['Amplitude Ratio (Peak1/Peak4)'].append(amplitude_ratio)
+                    metrics_data['File Name'].append(file_name.split("/")[-1])
+                    metrics_data['Frequency (Hz)'].append(freq)
+                    metrics_data['dB Level'].append(db)
+                    metrics_data['First Peak Amplitude (mV)'].append(first_peak_amplitude)
+                    metrics_data['Latency to First Peak (ms)'].append(latency_to_first_peak)
+                    metrics_data['Amplitude Ratio (Peak1/Peak4)'].append(amplitude_ratio)
 
     metrics_table = pd.DataFrame(metrics_data)
     st.table(metrics_table)
@@ -862,7 +847,6 @@ if uploaded_files:
     distinct_freqs = sorted(pd.concat([df['Freq(Hz)'] for df in dfs]).unique())
     distinct_dbs = sorted(pd.concat([df['Level(dB)'] if level else df['PostAtten(dB)'] for df in dfs]).unique())
     
-
     multiply_y_factor = st.sidebar.number_input("Multiply Y Values by Factor", value=1.0)
 
     # Frequency dropdown options
@@ -889,8 +873,7 @@ if uploaded_files:
             fig = plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=True)
         else:
             fig = plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False)
-        st.plotly_chart(fig)
-        display_metrics_table_all_db(df, freq, distinct_dbs, baseline_level)
+        display_metrics_table_all_db(selected_dfs, freq, distinct_dbs, baseline_level)
 
     if st.sidebar.button("Plot Waves at Single dB Level"):
         fig = plot_waves_single_db(df, db, y_min, y_max)
