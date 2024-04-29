@@ -515,13 +515,16 @@ def plot_waves_stacked(df, freq, y_min, y_max, plot_time_warped=False):
 
     # Calculate the vertical offset for each waveform
     num_dbs = len(unique_dbs)
-    vertical_spacing = (y_max - y_min) / num_dbs
+    vertical_spacing = 20 / num_dbs
 
     # Initialize an offset for each dB level
     db_offsets = {db: y_min + i * vertical_spacing for i, db in enumerate(unique_dbs)}
 
+    # Find the highest dB level
+    max_db = max(unique_dbs)
+
     # Process and plot each waveform
-    for db in sorted(d.unique()):
+    for db in sorted(d.unique(), reverse=True):
         khz = df[(df['Freq(Hz)'] == freq) & (d == db)]
 
         if not khz.empty:
@@ -529,8 +532,16 @@ def plot_waves_stacked(df, freq, y_min, y_max, plot_time_warped=False):
             final = df.loc[index, '0':]
             final = pd.to_numeric(final, errors='coerce')[:-1]
 
+            # Normalize the waveform
+            if db == max_db:
+                max_value = final.abs().max()  # Find the maximum absolute value
+            final_normalized = final / max_value  # Normalize
+
+            # Scale relative to the highest decibel wave
+            #final_scaled = final_normalized * (db / max_db)
+
             # Apply the vertical offset
-            y_values = final + db_offsets[db]
+            y_values = final_normalized + db_offsets[db]
 
             # Optionally apply time warping
             if plot_time_warped:
@@ -542,7 +553,8 @@ def plot_waves_stacked(df, freq, y_min, y_max, plot_time_warped=False):
                                      y=y_values,
                                      mode='lines',
                                      name=f'dB: {db}',
-                                     line=dict(color='black')))
+                                     #line=dict(color='black')
+                                     ))
 
     fig.update_layout(title=f'{uploaded_files[-1].name} - Frequency: {freq} Hz',
                       xaxis_title='Time (ms)',
@@ -855,8 +867,8 @@ if uploaded_files:
     # dB Level dropdown options
     db = st.sidebar.selectbox(f'Select dB {is_level}', options=distinct_dbs, index=0)
 
-    y_min = st.sidebar.slider("Y-axis Minimum", -2.5, -0.001, value = -2.5)
-    y_max = st.sidebar.slider("Y-axis Maximum", 0.001, 2.5, value = 2.5)
+    y_min = st.sidebar.number_input("Y-axis Minimum", value=-5.0)
+    y_max = st.sidebar.number_input("Y-axis Maximum", value=5.0)
 
     baseline_level_str = st.sidebar.text_input("Set Baseline Level", "0.0")
     baseline_level = float(baseline_level_str)
