@@ -166,6 +166,10 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
         fig.update_layout(title=f'{selected_files[idx].split("/")[-1]} - Frequency: {freq} Hz', xaxis_title='Time (ms)', yaxis_title='Voltage (mV)')
         fig.update_layout(annotations=annotations)
         fig.update_layout(yaxis_range=[y_min, y_max])
+        custom_width = 700
+        custom_height = 450
+
+        fig.update_layout(width=custom_width, height=custom_height)
 
         st.plotly_chart(fig)
 
@@ -321,68 +325,72 @@ def plotting_waves_gauss(df, freq, db, n=15, sigma=3):
     return fig
 
 def plot_3d_surface(df, freq, y_min, y_max):
-    fig = go.Figure()
-
-    if len(selected_dfs) > 1:
-        st.write("Can only process one file at a time.")
-        return
-    else:
-        df = selected_dfs[0]
-
-    # Filter DataFrame to include only data for the specified frequency
-    df_filtered = df[df['Freq(Hz)'] == freq]
-
     if level:
-        d = df_filtered['Level(dB)']
+        db_column = 'Level(dB)'
     else:
-        d = df_filtered['PostAtten(dB)']
+        db_column = 'PostAtten(dB)'
 
-    # Get unique dB levels for the filtered DataFrame
-    db_levels = sorted(d.unique())
+    if len(selected_dfs) == 0:
+        st.write("No files selected.")
+        return
+    
+    for idx, file_df in enumerate(selected_dfs):
+        fig = go.Figure()
 
-    original_waves = []  # List to store original waves
-    wave_colors = [f'rgb(255, 0, 255)' for b in np.linspace(0, 0, len(db_levels))]
-    connecting_line_color = 'rgba(0, 255, 0, 0.3)'
+        # Filter DataFrame to include only data for the specified frequency
+        df_filtered = file_df[file_df['Freq(Hz)'] == freq]
 
-    for db in db_levels:
-        khz = df_filtered[d == db]
-        
+        # Get unique dB levels for the filtered DataFrame
+        db_levels = sorted(df_filtered[db_column].unique())
+
+        original_waves = []  # List to store original waves
+        wave_colors = [f'rgb(255, 0, 255)' for b in np.linspace(0, 0, len(db_levels))]
+        connecting_line_color = 'rgba(0, 255, 0, 0.3)'
+
+        for db in db_levels:
+            khz = df_filtered[df_filtered[db_column] == db]
+            
+            if not khz.empty:
+                index = khz.index.values[0]
+                final = df_filtered.loc[index, '0':]
+                final = pd.to_numeric(final, errors='coerce')
+
+                if multiply_y_factor != 1:
+                    y_values = final * multiply_y_factor
+                else:
+                    y_values = final
+
+                original_waves.append(y_values.to_list()) 
+
+        # Convert original waves to a 2D numpy array
+        original_waves_array = np.array([wave[:-1] for wave in original_waves])
+
+        try:
+            # Apply time warping to all waves in the array
+            time = np.linspace(0, 10, original_waves_array.shape[1])
+            obj = fs.fdawarp(original_waves_array.T, time)
+            obj.srsf_align(parallel=True)
+            warped_waves_array = obj.fn.T  # Use the time-warped curves
+        except IndexError:
+            pass
+
+        # Plot all time-warped waves in the array
+        for i, (db, warped_waves) in enumerate(zip(db_levels, warped_waves_array)):
+            fig.add_trace(go.Scatter3d(x=[db] * len(warped_waves), y=np.linspace(0, 10, len(warped_waves)), z=warped_waves, mode='lines', name=f'dB: {db}', line=dict(color=wave_colors[i])))
+
+        # Create surface connecting the curves at each time point
+        for i in range(len(time)):
+            z_values_at_time = [warped_waves_array[j, i] for j in range(len(db_levels))]
+            fig.add_trace(go.Scatter3d(x=db_levels, y=[time[i]] * len(db_levels), z=z_values_at_time, mode='lines', name=f'Time: {time[i]:.2f} ms', line=dict(color=connecting_line_color)))
+
+        fig.update_layout(width=700, height=450)
+        fig.update_layout(title=f'{selected_files[idx].split("/")[-1]} - Frequency: {freq} Hz', scene=dict(xaxis_title=f'dB {is_level}', yaxis_title='Time (ms)', zaxis_title='Voltage (mV)'))
+        fig.update_layout(annotations=annotations)
+        fig.update_layout(scene=dict(zaxis=dict(range=[y_min, y_max])))
+
+        khz = file_df[(file_df['Freq(Hz)'] == freq)]
         if not khz.empty:
-            index = khz.index.values[0]
-            final = df_filtered.loc[index, '0':]
-            final = pd.to_numeric(final, errors='coerce')
-
-            if multiply_y_factor != 1:
-                y_values = final * multiply_y_factor
-            else:
-                y_values = final
-
-            original_waves.append(y_values.to_list()) 
-
-    # Convert original waves to a 2D numpy array
-    original_waves_array = np.array([wave[:-1] for wave in original_waves])
-
-    # Apply time warping to all waves in the array
-    time = np.linspace(0, 10, original_waves_array.shape[1])
-    obj = fs.fdawarp(original_waves_array.T, time)
-    obj.srsf_align(parallel=True)
-    warped_waves_array = obj.fn.T  # Use the time-warped curves
-
-    # Plot all time-warped waves in the array
-    for i, (db, warped_waves) in enumerate(zip(db_levels, warped_waves_array)):
-        fig.add_trace(go.Scatter3d(x=[db] * len(warped_waves), y=np.linspace(0, 10, len(warped_waves)), z=warped_waves, mode='lines', name=f'dB: {db}', line=dict(color=wave_colors[i])))
-
-    # Create surface connecting the curves at each time point
-    for i in range(len(time)):
-        z_values_at_time = [warped_waves_array[j, i] for j in range(len(db_levels))]
-        fig.add_trace(go.Scatter3d(x=db_levels, y=[time[i]] * len(db_levels), z=z_values_at_time, mode='lines', name=f'Time: {time[i]:.2f} ms', line=dict(color=connecting_line_color)))
-
-    fig.update_layout(width=700, height=450)
-    fig.update_layout(title=f'{selected_files[0].split("/")[-1]} - Frequency: {freq} Hz', scene=dict(xaxis_title=f'dB {is_level}', yaxis_title='Time (ms)', zaxis_title='Voltage (mV)'))
-    fig.update_layout(annotations=annotations)
-    fig.update_layout(scene=dict(zaxis=dict(range=[y_min, y_max])))
-
-    return fig
+            st.plotly_chart(fig)
 
 def display_metrics_table(df, freq, db, baseline_level):
     if level:
@@ -503,73 +511,80 @@ def display_metrics_table_all_db(selected_dfs, freq, db_levels, baseline_level, 
     st.table(metrics_table)
 
 def plot_waves_stacked(df, freq, y_min, y_max, plot_time_warped=False):
-    fig = go.Figure()
-
     if level:
-        d = df['Level(dB)']
+        db_column = 'Level(dB)'
     else:
-        d = df['PostAtten(dB)']
+        db_column = 'PostAtten(dB)'
 
-    # Get unique dB levels
-    unique_dbs = sorted(d.unique())
+    if len(selected_dfs) == 0:
+        st.write("No files selected.")
+        return
 
-    # Calculate the vertical offset for each waveform
-    num_dbs = len(unique_dbs)
-    vertical_spacing = 20 / num_dbs
+    for idx, file_df in enumerate(selected_dfs):
+        fig = go.Figure()
 
-    # Initialize an offset for each dB level
-    db_offsets = {db: y_min + i * vertical_spacing for i, db in enumerate(unique_dbs)}
+        # Get unique dB levels
+        unique_dbs = sorted(file_df[db_column].unique())
 
-    # Find the highest dB level
-    max_db = max(unique_dbs)
+        # Calculate the vertical offset for each waveform
+        num_dbs = len(unique_dbs)
+        vertical_spacing = 25 / num_dbs
 
-    # Process and plot each waveform
-    for db in sorted(d.unique(), reverse=True):
-        khz = df[(df['Freq(Hz)'] == freq) & (d == db)]
+        # Initialize an offset for each dB level
+        db_offsets = {db: y_min + i * vertical_spacing for i, db in enumerate(unique_dbs)}
 
+        # Find the highest dB level
+        max_db = max(unique_dbs)
+
+        # Process and plot each waveform
+        for db in sorted(file_df[db_column].unique(), reverse=True):
+            khz = file_df[(file_df['Freq(Hz)'] == freq) & (file_df[db_column] == db)]
+
+            if not khz.empty:
+                index = khz.index.values[0]
+                final = file_df.loc[index, '0':]
+                final = pd.to_numeric(final, errors='coerce')[:-1]
+
+                # Normalize the waveform
+                if db == max_db:
+                    max_value = final.abs().max()  # Find the maximum absolute value
+                final_normalized = final / max_value  # Normalize
+
+                # Scale relative to the highest decibel wave
+                #final_scaled = final_normalized * (db / max_db)
+
+                # Apply the vertical offset
+                y_values = final_normalized + db_offsets[db]
+
+                # Optionally apply time warping
+                if plot_time_warped:
+                    # ... (your time warping code here)
+                    pass
+
+                # Plot the waveform
+                fig.add_trace(go.Scatter(x=np.linspace(0, 10, y_values.shape[0]),
+                                        y=y_values,
+                                        mode='lines',
+                                        name=f'dB: {db}',
+                                        #line=dict(color='black')
+                                        ))
+
+        fig.update_layout(title=f'{selected_files[idx].split("/")[-1]} - Frequency: {freq} Hz',
+                        xaxis_title='Time (ms)',
+                        yaxis_title='Voltage (mV)')
+        fig.update_layout(yaxis_range=[y_min, y_max])
+        # Set custom width and height (in pixels)
+        custom_width = 400
+        custom_height = 700
+
+        fig.update_layout(width=custom_width, height=custom_height)
+
+        fig.update_layout(yaxis=dict(showticklabels=False, showgrid=False, zeroline=False))
+        fig.update_layout(xaxis=dict(showgrid=False, zeroline=False))
+
+        khz = file_df[(file_df['Freq(Hz)'] == freq)]
         if not khz.empty:
-            index = khz.index.values[0]
-            final = df.loc[index, '0':]
-            final = pd.to_numeric(final, errors='coerce')[:-1]
-
-            # Normalize the waveform
-            if db == max_db:
-                max_value = final.abs().max()  # Find the maximum absolute value
-            final_normalized = final / max_value  # Normalize
-
-            # Scale relative to the highest decibel wave
-            #final_scaled = final_normalized * (db / max_db)
-
-            # Apply the vertical offset
-            y_values = final_normalized + db_offsets[db]
-
-            # Optionally apply time warping
-            if plot_time_warped:
-                # ... (your time warping code here)
-                pass
-
-            # Plot the waveform
-            fig.add_trace(go.Scatter(x=np.linspace(0, 10, y_values.shape[0]),
-                                     y=y_values,
-                                     mode='lines',
-                                     name=f'dB: {db}',
-                                     #line=dict(color='black')
-                                     ))
-
-    fig.update_layout(title=f'{uploaded_files[-1].name} - Frequency: {freq} Hz',
-                      xaxis_title='Time (ms)',
-                      yaxis_title='Voltage (mV)')
-    fig.update_layout(yaxis_range=[y_min, y_max])
-    # Set custom width and height (in pixels)
-    custom_width = 400
-    custom_height = 700
-
-    fig.update_layout(width=custom_width, height=custom_height)
-
-    fig.update_layout(yaxis=dict(showticklabels=False, showgrid=False, zeroline=False))
-    fig.update_layout(xaxis=dict(showgrid=False, zeroline=False))
-
-    return fig
+            st.plotly_chart(fig)
 
 def arfread(PATH, **kwargs):
     # defaults
@@ -907,10 +922,9 @@ if uploaded_files:
     
     if st.sidebar.button("Plot Stacked Waves at Single Frequency"):
         if plot_time_warped:
-            fig = plot_waves_stacked(df, freq, y_min, y_max, plot_time_warped=True)
+            plot_waves_stacked(df, freq, y_min, y_max, plot_time_warped=True)
         else:
-            fig = plot_waves_stacked(df, freq, y_min, y_max, plot_time_warped=False)
-        st.plotly_chart(fig)
+            plot_waves_stacked(df, freq, y_min, y_max, plot_time_warped=False)
     
     #if st.sidebar.button("Plot Waves with Cubic Spline"):
     #    fig = plotting_waves_cubic_spline(df, freq, db)
@@ -918,8 +932,7 @@ if uploaded_files:
     #    st.plotly_chart(fig)
 
     if st.sidebar.button("Plot 3D Surface"):
-        fig_3d_surface = plot_3d_surface(df, freq, y_min, y_max)
-        st.plotly_chart(fig_3d_surface)
+        plot_3d_surface(df, freq, y_min, y_max)
     
     #if st.sidebar.button("Plot Waves with Gaussian Smoothing"):
     #    fig_gauss = plotting_waves_gauss(dfs, freq, db)
