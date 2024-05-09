@@ -141,12 +141,21 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
     for idx, file_df in enumerate(selected_dfs):
         fig = go.Figure()
 
-        for db in sorted(file_df[db_column].unique()):
-            khz = file_df[(file_df['Freq(Hz)'] == freq) & (file_df[db_column] == db)]
+        # Filter DataFrame to include only data for the specified frequency
+        df_filtered = file_df[file_df['Freq(Hz)'] == freq]
 
+        # Get unique dB levels for the filtered DataFrame
+        db_levels = sorted(df_filtered[db_column].unique())
+
+        if plot_time_warped:
+            original_waves = []  # Only store original waves if not plotting time warped
+
+        for i, db in enumerate(db_levels):
+            khz = df_filtered[df_filtered[db_column] == db]
+            
             if not khz.empty:
                 index = khz.index.values[0]
-                final = file_df.loc[index, '0':].dropna()
+                final = df_filtered.loc[index, '0':]
                 final = pd.to_numeric(final, errors='coerce')
 
                 if multiply_y_factor != 1:
@@ -155,13 +164,32 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
                     y_values = final
 
                 if plot_time_warped:
-                    time = np.linspace(0, 10, len(y_values))
-                    # Apply time warping
-                    obj = fs.fdawarp(np.array(y_values).reshape(-1, 1), time)
-                    obj.srsf_align(parallel=True)
-                    y_values = obj.fn.T.squeeze()
+                    original_waves.append(y_values.to_list()) 
+                else:
+                    # Define color scale from dark red to light red based on dB level
+                    col_diff = np.linspace(255, 125, len(db_levels))
+                    color_scale = f'rgb(0, {col_diff[i]}, {col_diff[i]})'  # Adjust color intensity for each dB level
+                    fig.add_trace(go.Scatter(x=np.linspace(0,10, len(y_values)), y=y_values, mode='lines', name=f'db: {db} dB', line=dict(color=color_scale)))
 
-                fig.add_trace(go.Scatter(x=np.linspace(0, 10, len(y_values)), y=y_values, mode='lines', name=f'dB: {db}'))
+        if plot_time_warped:
+            # Convert original waves to a 2D numpy array
+            original_waves_array = np.array([wave[:-1] for wave in original_waves])
+
+            try:
+                # Apply time warping to all waves in the array
+                time = np.linspace(0, 10, original_waves_array.shape[1])
+                obj = fs.fdawarp(original_waves_array.T, time)
+                obj.srsf_align(parallel=True)
+                warped_waves_array = obj.fn.T  # Use the time-warped curves
+                
+                # Plot time-warped curves
+                for i, db in enumerate(db_levels):
+                    col_diff = np.linspace(255, 125, len(db_levels))
+                    color_scale = f'rgb(0, {col_diff[i]}, {col_diff[i]})'  # Adjust color intensity for each dB level
+                    fig.add_trace(go.Scatter(x=np.linspace(0,10, len(warped_waves_array[i])), y=warped_waves_array[i], mode='lines', name=f'dB: {db} dB', line=dict(color=color_scale)))
+
+            except IndexError:
+                pass
 
         fig.update_layout(title=f'{selected_files[idx].split("/")[-1]} - Frequency: {freq} Hz', xaxis_title='Time (ms)', yaxis_title='Voltage (mV)')
         fig.update_layout(annotations=annotations)
@@ -241,7 +269,7 @@ def plot_waves_single_tuple(df, freq, db, y_min, y_max):
             n = 20
             # Find highest peaks separated by at least n data points in the smoothed curve
             smoothed_peaks, _ = find_peaks(smoothed_waveform[26:], distance=n)
-            smoothed_troughs, _ = find_peaks(-smoothed_waveform, distance=n)
+            smoothed_troughs, _ = find_peaks(-smoothed_waveform, distance=12)
             sorted_indices = np.argsort(smoothed_waveform[smoothed_peaks+26])
             # Get the indices of the highest peaks (top 5 in this case)
             highest_smoothed_peaks = smoothed_peaks[sorted_indices[-5:]] + 26
