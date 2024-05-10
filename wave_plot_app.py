@@ -569,6 +569,8 @@ def plot_waves_stacked(df, freq, y_min, y_max, plot_time_warped=False):
         # Find the highest dB level
         max_db = max(unique_dbs)
 
+        threshold = calculate_hearing_threshold(file_df, freq)
+
         # Process and plot each waveform
         for db in sorted(file_df[db_column].unique(), reverse=True):
             khz = file_df[(file_df['Freq(Hz)'] == freq) & (file_df[db_column] == db)]
@@ -602,7 +604,7 @@ def plot_waves_stacked(df, freq, y_min, y_max, plot_time_warped=False):
                                         #line=dict(color='black')
                                         ))
 
-        fig.update_layout(title=f'{selected_files[idx].split("/")[-1]} - Frequency: {freq} Hz',
+        fig.update_layout(title=f'{selected_files[idx].split("/")[-1]} - Frequency: {freq} Hz, Estimated Threshold: {threshold}',
                         xaxis_title='Time (ms)',
                         yaxis_title='Voltage (mV)')
         fig.update_layout(yaxis_range=[y_min, y_max])
@@ -782,55 +784,54 @@ def get_str(data):
     return data.decode('utf-8')
 
 def calculate_hearing_threshold(df, freq):
-    db_values = []
-    
-    waves_array = []  # Array to store all waves
+    if level:
+        db_column = 'Level(dB)'
+    else:
+        db_column = 'PostAtten(dB)'
 
-    for db in range(0,95,5):
-        khz = df[(df['Freq(Hz)'] == freq) & (df['Level(dB)'] == db)]
-        
+    if len(selected_dfs) == 0:
+        st.write("No files selected.")
+        return
+    
+    threshold_dict = {}
+    
+    # Filter DataFrame to include only data for the specified frequency
+    df_filtered = df[df['Freq(Hz)'] == freq]
+
+    # Get unique dB levels for the filtered DataFrame
+    db_levels = sorted(df_filtered[db_column].unique())
+    lowest_db = None
+    waves = []
+    for i, db in enumerate(db_levels):
+        khz = df_filtered[df_filtered[db_column] == db]
         if not khz.empty:
             index = khz.index.values[0]
-            final = df.loc[index, '0':].dropna()
-            final = pd.to_numeric(final, errors='coerce')[:-1]
+            final = df_filtered.loc[index, '0':]
+            final = pd.to_numeric(final, errors='coerce')
+            final = np.array(final, dtype=np.float64)
 
             if multiply_y_factor != 1:
                 y_values = final * multiply_y_factor
             else:
                 y_values = final
-            db_values.append(db)
-
-            waves_array.append(y_values.to_list())
-
-    # Filter waves and dB values for the specified frequency
-    waves_fd = FDataGrid(waves_array)
-    fpca_discretized = FPCA(n_components=2)
-    fpca_discretized.fit(waves_fd)
-    projection = fpca_discretized.transform(waves_fd)
-
-    nearest_neighbors = NearestNeighbors(n_neighbors=2)
-    neighbors = nearest_neighbors.fit(projection[:, :2])
-    distances, indices = neighbors.kneighbors(projection[:, :2])
-    distances = np.sort(distances, axis=0)
-    distances = distances[:,1]
-
-    knee_locator = KneeLocator(range(len(distances)), distances, curve='convex', direction='increasing')
-    eps = distances[knee_locator.knee]
-
-    # Apply DBSCAN clustering
-    dbscan = DBSCAN(eps=eps)
-    clusters = dbscan.fit_predict(projection[:, :2])
-
-    # Create DataFrame with projection results and cluster labels
-    df = pd.DataFrame(projection[:, :2], columns=['1st_PC', '2nd_PC'])
-    df['Cluster'] = clusters
-    print(clusters)
-    df['DB_Value'] = db_values
-
-    # Find the minimum hearing threshold value among the outliers
-    min_threshold = np.min(df[df['Cluster']==-1]['DB_Value'])
-
-    return min_threshold
+            waves.append(y_values)
+    waves = np.array(waves)
+    waves = np.expand_dims(waves, axis=2)
+    # Perform prediction
+    prediction = thresholding_model.predict(waves)
+    y_pred = (prediction > 0.5).astype(int)
+    y_pred = list(y_pred.flatten())
+    print(y_pred)
+    for p, d in zip(y_pred, db_levels):
+        if p == 0:
+            lowest_db = d
+            continue
+        else:
+            lowest_db = d
+            break
+    # Store the lowest dB level where signal was detected
+    threshold = lowest_db
+    return threshold
 
 # Streamlit UI
 st.title("Wave Plotting App")
@@ -842,6 +843,8 @@ is_level = st.sidebar.radio("Select dB You Are Studying:", ("Attenuation", "Leve
 annotations = []
 
 thresholding_model = load_model('./abr_cnn.keras')
+thresholding_model.steps_per_execution = 1
+
 if uploaded_files:
     dfs = []
     selected_files = []
