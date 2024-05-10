@@ -19,6 +19,8 @@ from scipy.ndimage import gaussian_filter1d
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import keras
+from tensorflow.keras.models import load_model
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -839,7 +841,7 @@ is_level = st.sidebar.radio("Select dB You Are Studying:", ("Attenuation", "Leve
 
 annotations = []
 
-
+thresholding_model = load_model('./abr_cnn.keras')
 if uploaded_files:
     dfs = []
     selected_files = []
