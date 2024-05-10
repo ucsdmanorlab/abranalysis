@@ -9,3 +9,4 @@ scikit-fda
 kneed
 torch
 keras
+tensorflow
