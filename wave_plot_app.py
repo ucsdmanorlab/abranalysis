@@ -935,7 +935,7 @@ if uploaded_files:
         st.plotly_chart(fig)
         display_metrics_table(df, freq, db, baseline_level)
 
-    if st.sidebar.button("Plot Waves at Single Tuple (Frequency, dB)"):
+    if st.sidebar.button("Plot Waves at Single Wave (Frequency, dB)"):
         fig = plot_waves_single_tuple(df, freq, db, y_min, y_max)
         st.plotly_chart(fig)
         metrics_df = display_metrics_table(df, freq, db, baseline_level)
