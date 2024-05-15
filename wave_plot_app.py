@@ -24,6 +24,28 @@ from tensorflow.keras.models import load_model
 import warnings
 warnings.filterwarnings('ignore')
 
+# Define the CNN model
+class CNN(nn.Module):
+    def __init__(self, dropout_prob=0.1):
+        super(CNN, self).__init__()
+        self.conv1 = nn.Conv1d(in_channels=1, out_channels=16, kernel_size=3, stride=1, padding=1)
+        self.pool = nn.MaxPool1d(kernel_size=2, stride=2, padding=0)
+        self.conv2 = nn.Conv1d(in_channels=16, out_channels=32, kernel_size=3, stride=1, padding=1)
+        self.fc1 = nn.Linear(32 * 61, 128)
+        self.fc2 = nn.Linear(128, 1)
+        self.dropout = nn.Dropout(dropout_prob)
+
+    def forward(self, x):
+        x = self.pool(nn.functional.relu(self.conv1(x)))
+        x = self.dropout(x)
+        x = self.pool(nn.functional.relu(self.conv2(x)))
+        x = self.dropout(x)
+        x = x.view(-1, 32 * 61)
+        x = nn.functional.relu(self.fc1(x))
+        x = self.dropout(x)
+        x = self.fc2(x)
+        return x
+
 def plot_scatter_waves(df, freq, db, background_curves=False, smoothing_method='None', sigma=3, n=15):
     fig = go.Figure()
     khz = df[(df['Freq(Hz)'].astype(float) == freq) & (df['Level(dB)'].astype(float) == db)]
@@ -154,6 +176,8 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
 
         if plot_time_warped:
             original_waves = []  # Only store original waves if not plotting time warped
+        
+        threshold = calculate_hearing_threshold(file_df, freq)
 
         for i, db in enumerate(db_levels):
             khz = df_filtered[df_filtered[db_column] == db]
@@ -167,6 +191,35 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
                     y_values = final * multiply_y_factor
                 else:
                     y_values = final
+                
+                # Apply Gaussian smoothing to the original ABR waveform
+                smoothed_waveform = gaussian_filter1d(y_values, sigma=1.8125)
+
+                # Find highest peaks separated by at least n data points in the smoothed curve
+                n = 20
+                # Find highest peaks separated by at least n data points in the smoothed curve
+                smoothed_peaks, _ = find_peaks(smoothed_waveform[26:], distance=n)
+                smoothed_troughs, _ = find_peaks(-smoothed_waveform, distance=12)
+                sorted_indices = np.argsort(smoothed_waveform[smoothed_peaks+26])
+                # Get the indices of the highest peaks (top 5 in this case)
+                highest_smoothed_peaks = smoothed_peaks[sorted_indices[-5:]] + 26
+                relevant_troughs = np.array([])
+                for p in range(len(highest_smoothed_peaks)):
+                    c = 0
+                    for t in smoothed_troughs:
+                        if t > highest_smoothed_peaks[p]:
+                            if p != 4:
+                                try:
+                                    if t < highest_smoothed_peaks[p+1]:
+                                        relevant_troughs = np.append(relevant_troughs, int(t))
+                                        break
+                                except IndexError:
+                                    pass
+                            else:
+                                relevant_troughs = np.append(relevant_troughs, int(t))
+                                break
+                relevant_troughs = relevant_troughs.astype('i')
+
 
                 if plot_time_warped:
                     original_waves.append(y_values.to_list()) 
@@ -175,6 +228,11 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
                     col_diff = np.linspace(255, 125, len(db_levels))
                     color_scale = f'rgb(0, {col_diff[i]}, {col_diff[i]})'  # Adjust color intensity for each dB level
                     fig.add_trace(go.Scatter(x=np.linspace(0,10, len(y_values)), y=y_values, mode='lines', name=f'db: {db} dB', line=dict(color=color_scale)))
+                    # Mark the highest peaks with red markers
+                    fig.add_trace(go.Scatter(x=np.linspace(0,10,len(y_values))[highest_smoothed_peaks], y=y_values[highest_smoothed_peaks], mode='markers', marker=dict(color='red'), name='Peaks'))
+
+                    # Mark the relevant troughs with blue markers
+                    #fig.add_trace(go.Scatter(x=np.linspace(0,10,len(y_values))[relevant_troughs], y=y_values[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs'))
 
         if plot_time_warped:
             # Convert original waves to a 2D numpy array
@@ -191,10 +249,24 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
                 for i, db in enumerate(db_levels):
                     col_diff = np.linspace(255, 125, len(db_levels))
                     color_scale = f'rgb(0, {col_diff[i]}, {col_diff[i]})'  # Adjust color intensity for each dB level
-                    fig.add_trace(go.Scatter(x=np.linspace(0,10, len(warped_waves_array[i])), y=warped_waves_array[i], mode='lines', name=f'dB: {db} dB', line=dict(color=color_scale)))
+                    fig.add_trace(go.Scatter(x=np.linspace(0,10, len(warped_waves_array[i])), y=warped_waves_array[i], mode='lines', name=f'dB: {db} dB'))#, line=dict(color=color_scale)))
 
             except IndexError:
                 pass
+        
+        # Plot threshold wave in black
+        if threshold is not None:
+            threshold_wave = df_filtered[df_filtered[db_column] == threshold]
+            index = threshold_wave.index.values[0]
+            final = df_filtered.loc[index, '0':]
+            final = pd.to_numeric(final, errors='coerce')
+
+            if multiply_y_factor != 1:
+                y_values = final * multiply_y_factor
+            else:
+                y_values = final
+
+            fig.add_trace(go.Scatter(x=np.linspace(0, 10, len(y_values)), y=y_values, mode='lines', name=f'Threshold: {threshold}', line=dict(color='black')))
 
         fig.update_layout(title=f'{selected_files[idx].split("/")[-1]} - Frequency: {freq} Hz', xaxis_title='Time (ms)', yaxis_title='Voltage (mV)')
         fig.update_layout(annotations=annotations)
@@ -242,7 +314,7 @@ def plot_waves_single_db(df, db, y_min, y_max):
 
     return fig
 
-def plot_waves_single_tuple(df, freq, db, y_min, y_max):
+def plot_waves_single_tuple(freq, db, y_min, y_max):
     fig = go.Figure()
     i=0
     if level:
@@ -256,7 +328,7 @@ def plot_waves_single_tuple(df, freq, db, y_min, y_max):
         if not khz.empty:
             index = khz.index.values[0]
             final = df.loc[index, '0':].dropna()
-            final = pd.to_numeric(final, errors='coerce')[:-1]
+            final = pd.to_numeric(final, errors='coerce')
 
             time_axis = np.linspace(0, 10, len(final))
 
@@ -267,33 +339,7 @@ def plot_waves_single_tuple(df, freq, db, y_min, y_max):
             else:
                 y_values = final
             
-            # Apply Gaussian smoothing to the original ABR waveform
-            smoothed_waveform = gaussian_filter1d(y_values, sigma=1.8125)
-
-            # Find highest peaks separated by at least n data points in the smoothed curve
-            n = 20
-            # Find highest peaks separated by at least n data points in the smoothed curve
-            smoothed_peaks, _ = find_peaks(smoothed_waveform[26:], distance=n)
-            smoothed_troughs, _ = find_peaks(-smoothed_waveform, distance=12)
-            sorted_indices = np.argsort(smoothed_waveform[smoothed_peaks+26])
-            # Get the indices of the highest peaks (top 5 in this case)
-            highest_smoothed_peaks = smoothed_peaks[sorted_indices[-5:]] + 26
-            relevant_troughs = np.array([])
-            for p in range(len(highest_smoothed_peaks)):
-                c = 0
-                for t in smoothed_troughs:
-                    if t > highest_smoothed_peaks[p]:
-                        if p != 4:
-                            try:
-                                if t < highest_smoothed_peaks[p+1]:
-                                    relevant_troughs = np.append(relevant_troughs, int(t))
-                                    break
-                            except IndexError:
-                                pass
-                        else:
-                            relevant_troughs = np.append(relevant_troughs, int(t))
-                            break
-            relevant_troughs = relevant_troughs.astype('i')
+            highest_smoothed_peaks, relevant_troughs = peak_finding(y_values)
 
             fig.add_trace(go.Scatter(x=np.linspace(0,10, len(y_values)), y=y_values, mode='lines', name=f'{selected_files[i].split("/")[-1]}'))
 
@@ -793,8 +839,6 @@ def calculate_hearing_threshold(df, freq):
         st.write("No files selected.")
         return
     
-    threshold_dict = {}
-    
     # Filter DataFrame to include only data for the specified frequency
     df_filtered = df[df['Freq(Hz)'] == freq]
 
@@ -821,7 +865,6 @@ def calculate_hearing_threshold(df, freq):
     prediction = thresholding_model.predict(waves)
     y_pred = (prediction > 0.5).astype(int)
     y_pred = list(y_pred.flatten())
-    print(y_pred)
     for p, d in zip(y_pred, db_levels):
         if p == 0:
             lowest_db = d
@@ -832,6 +875,44 @@ def calculate_hearing_threshold(df, freq):
     # Store the lowest dB level where signal was detected
     threshold = lowest_db
     return threshold
+
+def peak_finding(wave):
+    # Prepare waveform
+    waveform = np.array(wave[:244], dtype=float)
+    waveform_torch = torch.tensor(waveform, dtype=torch.float32).unsqueeze(0)
+    
+    # Get prediction from model
+    outputs = peak_finding_model(waveform_torch)
+    prediction = int(round(outputs.detach().numpy()[0][0], 0))
+
+    # Apply Gaussian smoothing
+    smoothed_waveform = gaussian_filter1d(waveform, sigma=1)
+
+    # Find peaks and troughs
+    n = 18
+    t = 14
+    start_point = prediction - 9
+    smoothed_peaks, _ = find_peaks(smoothed_waveform[start_point:], distance=n)
+    smoothed_troughs, _ = find_peaks(-smoothed_waveform, distance=t)
+    sorted_indices = np.argsort(smoothed_waveform[smoothed_peaks+start_point])
+    highest_smoothed_peaks = np.sort(smoothed_peaks[sorted_indices[-5:]] + start_point)
+    relevant_troughs = np.array([])
+    for p in range(len(highest_smoothed_peaks)):
+        c = 0
+        for t in smoothed_troughs:
+            if t > highest_smoothed_peaks[p]:
+                if p != 4:
+                    try:
+                        if t < highest_smoothed_peaks[p+1]:
+                            relevant_troughs = np.append(relevant_troughs, int(t))
+                            break
+                    except IndexError:
+                        pass
+                else:
+                    relevant_troughs = np.append(relevant_troughs, int(t))
+                    break
+    relevant_troughs = relevant_troughs.astype('i')
+    return highest_smoothed_peaks, relevant_troughs
 
 # Streamlit UI
 st.title("Wave Plotting App")
@@ -844,6 +925,10 @@ annotations = []
 
 thresholding_model = load_model('./abr_cnn.keras')
 thresholding_model.steps_per_execution = 1
+
+peak_finding_model = CNN()
+model_loader = torch.load('./waveI_cnn_model.pth')
+peak_finding_model.load_state_dict(model_loader)
 
 if uploaded_files:
     dfs = []
@@ -944,7 +1029,7 @@ if uploaded_files:
         display_metrics_table(df, freq, db, baseline_level)
 
     if st.sidebar.button("Plot Waves at Single Wave (Frequency, dB)"):
-        fig = plot_waves_single_tuple(df, freq, db, y_min, y_max)
+        fig = plot_waves_single_tuple(freq, db, y_min, y_max)
         st.plotly_chart(fig)
         metrics_df = display_metrics_table(df, freq, db, baseline_level)
         if metrics_df is not None:
