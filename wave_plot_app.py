@@ -520,8 +520,8 @@ def display_metrics_table(df, freq, db, baseline_level):
                 amplitude_ratio = np.nan
 
             metrics_table = pd.DataFrame({
-                'Metric': ['First Peak Amplitude (mV)', 'Latency to First Peak (ms)', 'Amplitude Ratio (Peak1/Peak4)', 'Estimated Threshold'],
-                'Value': [first_peak_amplitude, latency_to_first_peak, amplitude_ratio, calculate_hearing_threshold(df, freq)],
+                'Metric': ['First Peak Amplitude (mV)', 'Latency to First Peak (ms)', 'Amplitude Ratio (Peak1/Peak4)'],#, 'Estimated Threshold'],
+                'Value': [first_peak_amplitude, latency_to_first_peak, amplitude_ratio]#, calculate_hearing_threshold(df, freq)],
             })
             #st.table(metrics_table)
         return metrics_table
