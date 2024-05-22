@@ -192,34 +192,7 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
                 else:
                     y_values = final
                 
-                # Apply Gaussian smoothing to the original ABR waveform
-                smoothed_waveform = gaussian_filter1d(y_values, sigma=1.8125)
-
-                # Find highest peaks separated by at least n data points in the smoothed curve
-                n = 20
-                # Find highest peaks separated by at least n data points in the smoothed curve
-                smoothed_peaks, _ = find_peaks(smoothed_waveform[26:], distance=n)
-                smoothed_troughs, _ = find_peaks(-smoothed_waveform, distance=12)
-                sorted_indices = np.argsort(smoothed_waveform[smoothed_peaks+26])
-                # Get the indices of the highest peaks (top 5 in this case)
-                highest_smoothed_peaks = smoothed_peaks[sorted_indices[-5:]] + 26
-                relevant_troughs = np.array([])
-                for p in range(len(highest_smoothed_peaks)):
-                    c = 0
-                    for t in smoothed_troughs:
-                        if t > highest_smoothed_peaks[p]:
-                            if p != 4:
-                                try:
-                                    if t < highest_smoothed_peaks[p+1]:
-                                        relevant_troughs = np.append(relevant_troughs, int(t))
-                                        break
-                                except IndexError:
-                                    pass
-                            else:
-                                relevant_troughs = np.append(relevant_troughs, int(t))
-                                break
-                relevant_troughs = relevant_troughs.astype('i')
-
+                highest_smoothed_peaks, relevant_troughs = peak_finding(y_values)
 
                 if plot_time_warped:
                     original_waves.append(y_values.to_list()) 
@@ -229,7 +202,7 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
                     color_scale = f'rgb(0, {col_diff[i]}, {col_diff[i]})'  # Adjust color intensity for each dB level
                     fig.add_trace(go.Scatter(x=np.linspace(0,10, len(y_values)), y=y_values, mode='lines', name=f'db: {db} dB', line=dict(color=color_scale)))
                     # Mark the highest peaks with red markers
-                    fig.add_trace(go.Scatter(x=np.linspace(0,10,len(y_values))[highest_smoothed_peaks], y=y_values[highest_smoothed_peaks], mode='markers', marker=dict(color='red'), name='Peaks'))
+                    fig.add_trace(go.Scatter(x=np.linspace(0,10,len(y_values))[highest_smoothed_peaks], y=y_values[highest_smoothed_peaks], mode='markers', marker=dict(color='red'), name='Peaks', showlegend=False))
 
                     # Mark the relevant troughs with blue markers
                     #fig.add_trace(go.Scatter(x=np.linspace(0,10,len(y_values))[relevant_troughs], y=y_values[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs'))
@@ -322,12 +295,12 @@ def plot_waves_single_tuple(freq, db, y_min, y_max):
     else:
         d = 'PostAtten(dB)'
     
-    for df in selected_dfs:
-        khz = df[(df['Freq(Hz)'] == freq) & (df[d] == db)]
+    for idx, file_df in enumerate(selected_dfs):
+        khz = file_df[(file_df['Freq(Hz)'] == freq) & (file_df[d] == db)]
         
         if not khz.empty:
             index = khz.index.values[0]
-            final = df.loc[index, '0':].dropna()
+            final = file_df.loc[index, '0':].dropna()
             final = pd.to_numeric(final, errors='coerce')
 
             time_axis = np.linspace(0, 10, len(final))
@@ -341,7 +314,7 @@ def plot_waves_single_tuple(freq, db, y_min, y_max):
             
             highest_smoothed_peaks, relevant_troughs = peak_finding(y_values)
 
-            fig.add_trace(go.Scatter(x=np.linspace(0,10, len(y_values)), y=y_values, mode='lines', name=f'{selected_files[i].split("/")[-1]}'))
+            fig.add_trace(go.Scatter(x=np.linspace(0,10, len(y_values)), y=y_values, mode='lines', name=f'{selected_files[idx].split("/")[-1]}'))
 
             # Mark the highest peaks with red markers
             fig.add_trace(go.Scatter(x=np.linspace(0,10,len(y_values))[highest_smoothed_peaks], y=y_values[highest_smoothed_peaks], mode='markers', marker=dict(color='red'), name='Peaks'))
@@ -355,6 +328,19 @@ def plot_waves_single_tuple(freq, db, y_min, y_max):
     fig.update_layout(title=f'Freq = {freq}, dB = {db}', xaxis_title='Time (ms)', yaxis_title='Voltage (mV)')
     fig.update_layout(annotations=annotations)
     fig.update_layout(yaxis_range=[y_min, y_max])
+    fig.update_layout(legend=dict(
+            x=0.99,
+            y=0.99,
+            xanchor='right',
+            yanchor='top',
+            traceorder='normal',
+            font=dict(
+                size=10,
+            ),
+            bgcolor='rgba(255, 255, 255, 0.5)',
+            bordercolor='Black',
+            borderwidth=1
+        ))
 
     return fig
 
@@ -522,9 +508,13 @@ def display_metrics_table(df, freq, db, baseline_level):
             metrics_table = pd.DataFrame({
                 'Metric': ['First Peak Amplitude (mV)', 'Latency to First Peak (ms)', 'Amplitude Ratio (Peak1/Peak4)'],#, 'Estimated Threshold'],
                 'Value': [first_peak_amplitude, latency_to_first_peak, amplitude_ratio]#, calculate_hearing_threshold(df, freq)],
-            })
+            }).reset_index(drop=True)
             #st.table(metrics_table)
-        return metrics_table
+            styled_metrics_table = metrics_table.style.set_table_styles(
+                [{'selector': 'th', 'props': [('text-align', 'center')]},
+                 {'selector': 'td', 'props': [('text-align', 'center')]}]
+            ).set_properties(**{'width': '100px'})
+        return styled_metrics_table
 
 def display_metrics_table_all_db(selected_dfs, freq, db_levels, baseline_level, level=True, multiply_y_factor=1):
     if level:
@@ -838,6 +828,9 @@ def calculate_hearing_threshold(df, freq):
     if len(selected_dfs) == 0:
         st.write("No files selected.")
         return
+
+    thresholding_model = load_model('./abr_cnn.keras')
+    thresholding_model.steps_per_execution = 1
     
     # Filter DataFrame to include only data for the specified frequency
     df_filtered = df[df['Freq(Hz)'] == freq]
@@ -922,9 +915,6 @@ is_rz_file = st.sidebar.radio("Select ARF File Type:", ("RP", "RZ"))
 is_level = st.sidebar.radio("Select dB You Are Studying:", ("Attenuation", "Level"))
 
 annotations = []
-
-thresholding_model = load_model('./abr_cnn.keras')
-thresholding_model.steps_per_execution = 1
 
 peak_finding_model = CNN()
 model_loader = torch.load('./waveI_cnn_model.pth')
