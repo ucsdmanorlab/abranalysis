@@ -10,3 +10,5 @@ kneed
 torch
 keras
 tensorflow
+matplotlib
+colorcet
