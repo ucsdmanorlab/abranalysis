@@ -1,4 +1,4 @@
-streamlit==1.27.0
+streamlit
 fdasrsf==2.4.3
 plotly==5.18.0
 pandas==2.1.1
