@@ -2,7 +2,7 @@
 ABRA is a web application created using Streamlit which allows users to batch-upload and analyze ABR data.
 It can either be run on the [web](https://ucsdabranalysis.streamlit.app)
 OR
-locally by going to working directory and running `streamlit run wave_plot_app.py` in your terminal.
+locally by going to working directory and running `streamlit run wave_plot_app.py` in your terminal after using `pip install` for the packages in the [requirements.txt file](https://github.com/abhierra2/ucsdpracticum/blob/main/requirements.txt).
 <br>
 First upload your file. If you're loading an Tucker Davis .arf file please select whether you got the file from BioSigRP or BioSigRZ. If you're uploading a .csv file make sure that the title for the decibel column is `Level(dB)`, the title for the frequency column is `Freq(Hz)`, and the vector of data points ends each corresponding row.
 <br></br>
