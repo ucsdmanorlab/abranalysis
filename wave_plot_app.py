@@ -24,6 +24,7 @@ from tensorflow.keras.models import load_model
 import matplotlib.pyplot as plt
 from matplotlib import cm
 import colorcet as cc
+import io
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -180,7 +181,12 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
         if plot_time_warped:
             original_waves = []  # Only store original waves if not plotting time warped
         
-        threshold = calculate_hearing_threshold(file_df, freq)
+        try:
+            threshold = calculate_hearing_threshold(file_df, freq)
+        except:
+            threshold = None
+            st.write("Threshold can't be calculated.")
+            pass
 
         # Get Glasbey color palette
         glasbey_colors = cc.glasbey[:len(db_levels)]
@@ -192,6 +198,18 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
                 index = khz.index.values[0]
                 final = df_filtered.loc[index, '0':]
                 final = pd.to_numeric(final, errors='coerce')
+
+                if len(final) > 244:
+                    new_points = np.linspace(0, len(final), 244)
+                    interpolated_values = np.interp(new_points, np.arange(len(final)), final)
+                    interpolated_values = pd.Series(interpolated_values)
+                    final = np.array(interpolated_values[:244], dtype=float)
+                if len(final) < 244:
+                    original_indices = np.arange(len(final))
+                    target_indices = np.linspace(0, len(final) - 1, 244)
+                    cs = CubicSpline(original_indices, final)
+                    smooth_amplitude = cs(target_indices)
+                    final = smooth_amplitude
 
                 if multiply_y_factor != 1:
                     y_values = final * multiply_y_factor
@@ -206,10 +224,10 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
                     color_scale = glasbey_colors[i]
                     fig.add_trace(go.Scatter(x=np.linspace(0,10, len(y_values)), y=y_values, mode='lines', name=f'{int(db)} dB', line=dict(color=color_scale)))
                     # Mark the highest peaks with red markers
-                    fig.add_trace(go.Scatter(x=np.linspace(0,10,len(y_values))[highest_smoothed_peaks], y=y_values[highest_smoothed_peaks], mode='markers', marker=dict(color='red'), name='Peaks', showlegend=False))
+                    fig.add_trace(go.Scatter(x=np.linspace(0,10,len(y_values))[highest_smoothed_peaks], y=y_values[highest_smoothed_peaks], mode='markers', marker=dict(color='red'), name='Peaks', showlegend=True))
 
                     # Mark the relevant troughs with blue markers
-                    #fig.add_trace(go.Scatter(x=np.linspace(0,10,len(y_values))[relevant_troughs], y=y_values[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs'))
+                    fig.add_trace(go.Scatter(x=np.linspace(0,10,len(y_values))[relevant_troughs], y=y_values[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs'))
 
         if plot_time_warped:
             # Convert original waves to a 2D numpy array
@@ -306,7 +324,17 @@ def plot_waves_single_tuple(freq, db, y_min, y_max):
             final = file_df.loc[index, '0':].dropna()
             final = pd.to_numeric(final, errors='coerce')
 
-            time_axis = np.linspace(0, 10, len(final))
+            if len(final) > 244:
+                new_points = np.linspace(0, len(final), 244)
+                interpolated_values = np.interp(new_points, np.arange(len(final)), final)
+                interpolated_values = pd.Series(interpolated_values)
+                final = np.array(interpolated_values[:244], dtype=float)
+            if len(final) < 244:
+                original_indices = np.arange(len(final))
+                target_indices = np.linspace(0, len(final) - 1, 244)
+                cs = CubicSpline(original_indices, final)
+                smooth_amplitude = cs(target_indices)
+                final = smooth_amplitude
 
             # Find highest peaks separated by at least n data points
 
@@ -327,8 +355,9 @@ def plot_waves_single_tuple(freq, db, y_min, y_max):
 
             i+=1
 
-    fig.update_layout(width=700, height=450)
-    fig.update_layout(title=f'Freq = {freq}, dB = {db}', xaxis_title='Time (ms)', yaxis_title='Voltage (μV)')
+    fig.update_layout(width=700, height=450, showlegend=False)
+    fig.update_layout(title=f'Freq = {freq}, dB = {db}')
+    fig.update_layout(xaxis_title='Time (ms)', yaxis_title='Voltage (μV)')
     fig.update_layout(annotations=annotations)
     fig.update_layout(yaxis_range=[y_min, y_max])
     fig.update_layout(legend=dict(
@@ -422,13 +451,25 @@ def plot_3d_surface(df, freq, y_min, y_max):
                 index = khz.index.values[0]
                 final = df_filtered.loc[index, '0':]
                 final = pd.to_numeric(final, errors='coerce')
+                if len(final) > 244:
+                    new_points = np.linspace(0, len(final), 244)
+                    interpolated_values = np.interp(new_points, np.arange(len(final)), final)
+                    interpolated_values = pd.Series(interpolated_values)
+                    final = np.array(interpolated_values[:244], dtype=float)
+                if len(final) < 244:
+                    original_indices = np.arange(len(final))
+                    target_indices = np.linspace(0, len(final) - 1, 244)
+                    cs = CubicSpline(original_indices, final)
+                    smooth_amplitude = cs(target_indices)
+                    final = smooth_amplitude
+                final = pd.to_numeric(final, errors='coerce')
 
                 if multiply_y_factor != 1:
                     y_values = final * multiply_y_factor
                 else:
                     y_values = final
 
-                original_waves.append(y_values.to_list()) 
+                original_waves.append(y_values.tolist()) 
 
         # Convert original waves to a 2D numpy array
         original_waves_array = np.array([wave[:-1] for wave in original_waves])
@@ -502,7 +543,7 @@ def display_metrics_table(df, freq, db, baseline_level):
             ).set_properties(**{'width': '100px'})
         return styled_metrics_table
 
-def display_metrics_table_all_db(selected_dfs, freq, db_levels, baseline_level, level=True, multiply_y_factor=1):
+def display_metrics_table_all_db(selected_dfs, freq, db_levels, baseline_level, multiply_y_factor=1):
     if level:
         db_column = 'Level(dB)'
     else:
@@ -511,13 +552,29 @@ def display_metrics_table_all_db(selected_dfs, freq, db_levels, baseline_level, 
     metrics_data = {'File Name': [], 'Frequency (Hz)': [], 'dB Level': [], 'First Peak Amplitude (mV)': [], 'Latency to First Peak (ms)': [], 'Amplitude Ratio (Peak1/Peak4)': [], 'Estimated Threshold': []}
 
     for file_df, file_name in zip(selected_dfs, selected_files):
-        threshold = calculate_hearing_threshold(file_df, freq)
+        try:
+            threshold = calculate_hearing_threshold(file_df, freq)
+        except:
+            threshold=np.nan
+            pass
+
         for db in db_levels:
             khz = file_df[(file_df['Freq(Hz)'] == freq) & (file_df[db_column] == db)]
             if not khz.empty:
                 index = khz.index.values[0]
                 final = file_df.loc[index, '0':]
                 final = pd.to_numeric(final, errors='coerce')
+                if len(final) > 244:
+                    new_points = np.linspace(0, len(final), 244)
+                    interpolated_values = np.interp(new_points, np.arange(len(final)), final)
+                    interpolated_values = pd.Series(interpolated_values)
+                    final = np.array(interpolated_values[:244], dtype=float)
+                if len(final) < 244:
+                    original_indices = np.arange(len(final))
+                    target_indices = np.linspace(0, len(final) - 1, 244)
+                    cs = CubicSpline(original_indices, final)
+                    smooth_amplitude = cs(target_indices)
+                    final = smooth_amplitude
 
                 if multiply_y_factor != 1:
                     y_values = final * multiply_y_factor
@@ -576,7 +633,11 @@ def plot_waves_stacked(df, freq, y_min, y_max, plot_time_warped=False):
         # Find the highest dB level
         max_db = max(unique_dbs)
 
-        threshold = calculate_hearing_threshold(file_df, freq)
+        try:
+            threshold = calculate_hearing_threshold(file_df, freq)
+        except:
+            threshold = None
+            pass
 
         db_levels = sorted(file_df[db_column].unique(), reverse=True)
 
@@ -592,7 +653,20 @@ def plot_waves_stacked(df, freq, y_min, y_max, plot_time_warped=False):
                 final = file_df.loc[index, '0':]
                 final = pd.to_numeric(final, errors='coerce')[:-1]
 
+                if len(final) > 244:
+                    new_points = np.linspace(0, len(final), 244)
+                    interpolated_values = np.interp(new_points, np.arange(len(final)), final)
+                    interpolated_values = pd.Series(interpolated_values)
+                    final = np.array(interpolated_values[:244], dtype=float)
+                if len(final) < 244:
+                    original_indices = np.arange(len(final))
+                    target_indices = np.linspace(0, len(final) - 1, 244)
+                    cs = CubicSpline(original_indices, final)
+                    smooth_amplitude = cs(target_indices)
+                    final = smooth_amplitude
+
                 # Normalize the waveform
+                max_value = np.inf
                 if db == max_db:
                     max_value = final.abs().max()  # Find the maximum absolute value
                 final_normalized = final / max_value  # Normalize
@@ -827,16 +901,23 @@ def calculate_hearing_threshold(df, freq):
     df_filtered = df[df['Freq(Hz)'] == freq]
 
     # Get unique dB levels for the filtered DataFrame
-    db_levels = sorted(df_filtered[db_column].unique())
+    if db_column == 'Level(dB)':
+        db_levels = sorted(df_filtered[db_column].unique())
+    if db_column == 'PostAtten(dB)':
+        db_levels = sorted(df_filtered[db_column].unique(), reverse=True)
     lowest_db = None
     waves = []
     for i, db in enumerate(db_levels):
         khz = df_filtered[df_filtered[db_column] == db]
         if not khz.empty:
             index = khz.index.values[0]
-            final = df_filtered.loc[index, '0':]
+            final = df_filtered.loc[index, '0':].dropna()
             final = pd.to_numeric(final, errors='coerce')
             final = np.array(final, dtype=np.float64)
+
+            new_points = np.linspace(0, len(final), 244)
+            interpolated_values = np.interp(new_points, np.arange(len(final)), final)
+            interpolated_values = pd.Series(interpolated_values)
 
             if multiply_y_factor != 1:
                 y_values = final * multiply_y_factor
@@ -873,10 +954,22 @@ def all_thresholds():
                 pass
     threshold_table = pd.DataFrame(df_dict)
     st.dataframe(threshold_table, hide_index=True, use_container_width=True)
+    return threshold_table
 
 def peak_finding(wave):
     # Prepare waveform
-    waveform = np.array(wave[:244], dtype=float)
+    waveform=None
+    if len(wave) >= 244:
+        new_points = np.linspace(0, len(wave), 244)
+        interpolated_values = np.interp(new_points, np.arange(len(wave)), wave)
+        interpolated_values = pd.Series(interpolated_values)
+        waveform = np.array(interpolated_values[:244], dtype=float)
+    if len(wave) < 244:
+        original_indices = np.arange(len(wave))
+        target_indices = np.linspace(0, len(wave) - 1, 244)
+        cs = CubicSpline(original_indices, wave)
+        smooth_amplitude = cs(target_indices)
+        waveform = smooth_amplitude
     waveform_torch = torch.tensor(waveform, dtype=torch.float32).unsqueeze(0)
     
     # Get prediction from model
@@ -1026,7 +1119,21 @@ if uploaded_files:
     if st.sidebar.button("Plot Single Wave (Frequency, dB)"):
         fig = plot_waves_single_tuple(freq, db, y_min, y_max)
         st.plotly_chart(fig)
+        fig.write_image("fig1.pdf")
         display_metrics_table_all_db(selected_dfs, freq, [db], baseline_level)
+        # Create an in-memory buffer
+        buffer = io.BytesIO()
+
+        # Save the figure as a pdf to the buffer
+        fig.write_image(file=buffer, format="pdf")
+
+        # Download the pdf from the buffer
+        st.download_button(
+            label="Download PDF",
+            data=buffer,
+            file_name="figure.pdf",
+            mime="application/pdf",
+        )
     
     if st.sidebar.button("Plot Stacked Waves at Single Frequency"):
         if plot_time_warped:
