@@ -196,7 +196,7 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
             
             if not khz.empty:
                 index = khz.index.values[0]
-                final = df_filtered.loc[index, '0':]
+                final = df_filtered.loc[index, '0':].dropna()
                 final = pd.to_numeric(final, errors='coerce')
 
                 if len(final) > 244:
@@ -342,7 +342,7 @@ def plot_waves_single_tuple(freq, db, y_min, y_max):
                 y_values = final * multiply_y_factor
             else:
                 y_values = final
-            
+
             highest_smoothed_peaks, relevant_troughs = peak_finding(y_values)
 
             fig.add_trace(go.Scatter(x=np.linspace(0,10, len(y_values)), y=y_values, mode='lines', name=f'{selected_files[idx].split("/")[-1]}'))
@@ -355,24 +355,24 @@ def plot_waves_single_tuple(freq, db, y_min, y_max):
 
             i+=1
 
-    fig.update_layout(width=700, height=450, showlegend=False)
+    fig.update_layout(width=700, height=450)
     fig.update_layout(title=f'Freq = {freq}, dB = {db}')
     fig.update_layout(xaxis_title='Time (ms)', yaxis_title='Voltage (μV)')
     fig.update_layout(annotations=annotations)
     fig.update_layout(yaxis_range=[y_min, y_max])
-    fig.update_layout(legend=dict(
-            x=0.99,
-            y=0.99,
-            xanchor='right',
-            yanchor='top',
-            traceorder='normal',
-            font=dict(
-                size=12,
-            ),
-            bgcolor='rgba(255, 255, 255, 0.5)',
-            bordercolor='Black',
-            borderwidth=1
-        ))
+    #fig.update_layout(legend=dict(
+    #        x=0.99,
+    #        y=0.99,
+    #        xanchor='right',
+    #        yanchor='top',
+    #        traceorder='normal',
+    #        font=dict(
+    #            size=12,
+    #        ),
+    #        bgcolor='rgba(255, 255, 255, 0.5)',
+    #        bordercolor='Black',
+    #        borderwidth=1
+    #    ))
 
     return fig
 
@@ -444,12 +444,18 @@ def plot_3d_surface(df, freq, y_min, y_max):
         wave_colors = [f'rgb(255, 0, 255)' for b in np.linspace(0, 0, len(db_levels))]
         connecting_line_color = 'rgba(0, 255, 0, 0.3)'
 
+        try:
+            threshold = calculate_hearing_threshold(file_df, freq)
+        except:
+            threshold = None
+            pass
+
         for db in db_levels:
             khz = df_filtered[df_filtered[db_column] == db]
             
             if not khz.empty:
                 index = khz.index.values[0]
-                final = df_filtered.loc[index, '0':]
+                final = df_filtered.loc[index, '0':].dropna()
                 final = pd.to_numeric(final, errors='coerce')
                 if len(final) > 244:
                     new_points = np.linspace(0, len(final), 244)
@@ -485,12 +491,14 @@ def plot_3d_surface(df, freq, y_min, y_max):
 
         # Plot all time-warped waves in the array
         for i, (db, warped_waves) in enumerate(zip(db_levels, warped_waves_array)):
-            fig.add_trace(go.Scatter3d(x=[db] * len(warped_waves), y=np.linspace(0, 10, len(warped_waves)), z=warped_waves, mode='lines', name=f'dB: {db}', line=dict(color=wave_colors[i])))
+            fig.add_trace(go.Scatter3d(x=[db] * len(warped_waves), y=np.linspace(0, 10, len(warped_waves)), z=warped_waves, mode='lines', name=f'{int(db)} dB', line=dict(color=wave_colors[i])))
+            if db == threshold:
+                fig.add_trace(go.Scatter3d(x=[db] * len(warped_waves), y=np.linspace(0, 10, len(warped_waves)), z=warped_waves, mode='lines', name=f'Thresh: {int(db)} dB', line=dict(color='black', width=5)))
 
         # Create surface connecting the curves at each time point
         for i in range(len(time)):
             z_values_at_time = [warped_waves_array[j, i] for j in range(len(db_levels))]
-            fig.add_trace(go.Scatter3d(x=db_levels, y=[time[i]] * len(db_levels), z=z_values_at_time, mode='lines', name=f'Time: {time[i]:.2f} ms', line=dict(color=connecting_line_color)))
+            fig.add_trace(go.Scatter3d(x=db_levels, y=[time[i]] * len(db_levels), z=z_values_at_time, mode='lines', name=f'Time: {time[i]:.2f} ms', line=dict(color=connecting_line_color), showlegend=False))
 
         fig.update_layout(width=700, height=450)
         fig.update_layout(title=f'{selected_files[idx].split("/")[-1]} - Frequency: {freq} Hz', scene=dict(xaxis_title=f'dB {is_level}', yaxis_title='Time (ms)', zaxis_title='Voltage (μV)'))
@@ -555,14 +563,14 @@ def display_metrics_table_all_db(selected_dfs, freq, db_levels, baseline_level, 
         try:
             threshold = calculate_hearing_threshold(file_df, freq)
         except:
-            threshold=np.nan
+            threshold = np.nan
             pass
 
         for db in db_levels:
             khz = file_df[(file_df['Freq(Hz)'] == freq) & (file_df[db_column] == db)]
             if not khz.empty:
                 index = khz.index.values[0]
-                final = file_df.loc[index, '0':]
+                final = file_df.loc[index, '0':].dropna()
                 final = pd.to_numeric(final, errors='coerce')
                 if len(final) > 244:
                     new_points = np.linspace(0, len(final), 244)
@@ -584,7 +592,10 @@ def display_metrics_table_all_db(selected_dfs, freq, db_levels, baseline_level, 
                 # Adjust the waveform by subtracting the baseline level
                 y_values -= baseline_level
 
-                highest_peaks, relevant_troughs = peak_finding(y_values)
+                try:
+                    highest_peaks, relevant_troughs = peak_finding(y_values)
+                except Exception as e:
+                    continue
 
                 if highest_peaks.size > 0:  # Check if highest_peaks is not empty
                     first_peak_amplitude = y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]
@@ -666,7 +677,6 @@ def plot_waves_stacked(df, freq, y_min, y_max, plot_time_warped=False):
                     final = smooth_amplitude
 
                 # Normalize the waveform
-                max_value = np.inf
                 if db == max_db:
                     max_value = final.abs().max()  # Find the maximum absolute value
                 final_normalized = final / max_value  # Normalize
@@ -690,6 +700,13 @@ def plot_waves_stacked(df, freq, y_min, y_max, plot_time_warped=False):
                                         name=f'{int(db)} dB',
                                         line=dict(color=color_scale)
                                         ))
+                if db == threshold:
+                    fig.add_trace(go.Scatter(x=np.linspace(0, 10, y_values.shape[0]),
+                                        y=y_values,
+                                        mode='lines',
+                                        name=f'Thresh:\n{int(db)} dB',
+                                        line=dict(color='black', width = 5)
+                                        ))
                 
                 fig.add_annotation(
                     x=10,  # x-coordinate of the annotation (end of waveform)
@@ -705,7 +722,7 @@ def plot_waves_stacked(df, freq, y_min, y_max, plot_time_warped=False):
                     xanchor="right"
                 )
 
-        fig.update_layout(title=f'{selected_files[idx].split("/")[-1]} - Frequency: {freq} Hz, Estimated Threshold: {threshold}',
+        fig.update_layout(title=f'{selected_files[idx].split("/")[-1]} - Frequency: {freq} Hz',
                         xaxis_title='Time (ms)',
                         yaxis_title='Voltage (μV)')
         fig.update_layout(yaxis_range=[y_min, y_max])
@@ -961,7 +978,7 @@ def all_thresholds():
 def peak_finding(wave):
     # Prepare waveform
     waveform=None
-    if len(wave) >= 244:
+    if len(wave) > 244:
         new_points = np.linspace(0, len(wave), 244)
         interpolated_values = np.interp(new_points, np.arange(len(wave)), wave)
         interpolated_values = pd.Series(interpolated_values)
@@ -972,6 +989,8 @@ def peak_finding(wave):
         cs = CubicSpline(original_indices, wave)
         smooth_amplitude = cs(target_indices)
         waveform = smooth_amplitude
+    if len(wave) == 244:
+        waveform = np.array(wave[:244], dtype=float)
     waveform_torch = torch.tensor(waveform, dtype=torch.float32).unsqueeze(0)
     
     # Get prediction from model
@@ -1076,6 +1095,7 @@ annotations = []
 peak_finding_model = CNN()
 model_loader = torch.load('./waveI_cnn_model.pth')
 peak_finding_model.load_state_dict(model_loader)
+peak_finding_model.eval()
 
 if uploaded_files:
     dfs = []
@@ -1170,10 +1190,10 @@ if uploaded_files:
             fig = plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False)
         display_metrics_table_all_db(selected_dfs, freq, distinct_dbs, baseline_level)
 
-    if st.sidebar.button("Plot Waves at Single dB Level"):
-        fig = plot_waves_single_db(df, db, y_min, y_max)
-        st.plotly_chart(fig)
-        display_metrics_table(df, freq, db, baseline_level)
+    #if st.sidebar.button("Plot Waves at Single dB Level"):
+    #    fig = plot_waves_single_db(df, db, y_min, y_max)
+    #    st.plotly_chart(fig)
+    #    display_metrics_table(df, freq, db, baseline_level)
 
     if st.sidebar.button("Plot Single Wave (Frequency, dB)"):
         fig = plot_waves_single_tuple(freq, db, y_min, y_max)
