@@ -917,7 +917,7 @@ def calculate_hearing_threshold(df, freq):
 
             new_points = np.linspace(0, len(final), 244)
             interpolated_values = np.interp(new_points, np.arange(len(final)), final)
-            interpolated_values = pd.Series(interpolated_values)
+            final = pd.Series(interpolated_values)
 
             if multiply_y_factor != 1:
                 y_values = final * multiply_y_factor
@@ -942,14 +942,16 @@ def calculate_hearing_threshold(df, freq):
     return threshold
 
 def all_thresholds():
-    df_dict = {'Filename': [], 'Frequency': [], 'Threshold': []}
+    df_dict = {'Filename': [], 'Frequency': [], 'Threshold': [], 'Unsupervised Threshold': []}
     for (file_df, file_name) in zip(selected_dfs, selected_files):
         for hz in distinct_freqs:
             try:
                 thresh = calculate_hearing_threshold(file_df, hz)
+                unsupervised_thresh = calculate_unsupervised_threshold(file_df, hz)
                 df_dict['Filename'].append(file_name.split("/")[-1])
                 df_dict['Frequency'].append(hz)
                 df_dict['Threshold'].append(thresh)
+                df_dict['Unsupervised Threshold'].append(unsupervised_thresh)
             except:
                 pass
     threshold_table = pd.DataFrame(df_dict)
@@ -1004,6 +1006,63 @@ def peak_finding(wave):
                     break
     relevant_troughs = relevant_troughs.astype('i')
     return highest_smoothed_peaks, relevant_troughs
+
+def calculate_unsupervised_threshold(df, freq):
+    if level:
+        db_column = 'Level(dB)'
+    else:
+        db_column = 'PostAtten(dB)'
+
+    if len(selected_dfs) == 0:
+        st.write("No files selected.")
+        return
+
+    waves_array = []  # Array to store all waves
+
+    khz = df[(df['Freq(Hz)'] == freq)]
+    db_values = sorted(khz[db_column].unique())
+    for db in db_values:
+        khz = df[(df['Freq(Hz)'] == freq) & (df[db_column] == db)]
+
+        if not khz.empty:
+            index = khz.index.values[0]
+            final = df.loc[index, '0':].dropna()
+            final = pd.to_numeric(final, errors='coerce')
+
+            if multiply_y_factor != 1:
+                y_values = final * multiply_y_factor
+            else:
+                y_values = final
+
+            waves_array.append(y_values.tolist())
+    # Filter waves and dB values for the specified frequency
+    waves_fd = FDataGrid(waves_array)
+    fpca_discretized = FPCA(n_components=2)
+    fpca_discretized.fit(waves_fd)
+    projection = fpca_discretized.transform(waves_fd)
+
+    nearest_neighbors = NearestNeighbors(n_neighbors=2)
+    neighbors = nearest_neighbors.fit(projection[:, :2])
+    distances, indices = neighbors.kneighbors(projection[:, :2])
+    distances = np.sort(distances, axis=0)
+    distances = distances[:,1]
+
+    knee_locator = KneeLocator(range(len(distances)), distances, curve='convex', direction='increasing')
+    eps = distances[knee_locator.knee]
+
+    # Apply DBSCAN clustering
+    dbscan = DBSCAN(eps=eps)
+    clusters = dbscan.fit_predict(projection[:, :2])
+
+    # Create DataFrame with projection results and cluster labels
+    dfn = pd.DataFrame(projection[:, :2], columns=['1st_PC', '2nd_PC'])
+    dfn['Cluster'] = clusters
+    dfn['DB_Value'] = db_values
+
+    # Find the minimum hearing threshold value among the outliers
+    min_threshold = np.min(dfn[dfn['Cluster']==-1]['DB_Value'])
+
+    return min_threshold
 
 # Streamlit UI
 st.title("Wave Plotting App")
