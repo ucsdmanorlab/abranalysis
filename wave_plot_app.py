@@ -200,7 +200,7 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
                 final = pd.to_numeric(final, errors='coerce')
 
                 if len(final) > 244:
-                    new_points = np.linspace(0, len(final), 244)
+                    new_points = np.linspace(0, len(final), 245)
                     interpolated_values = np.interp(new_points, np.arange(len(final)), final)
                     interpolated_values = pd.Series(interpolated_values)
                     final = np.array(interpolated_values[:244], dtype=float)
@@ -325,7 +325,7 @@ def plot_waves_single_tuple(freq, db, y_min, y_max):
             final = pd.to_numeric(final, errors='coerce')
 
             if len(final) > 244:
-                new_points = np.linspace(0, len(final), 244)
+                new_points = np.linspace(0, len(final), 245)
                 interpolated_values = np.interp(new_points, np.arange(len(final)), final)
                 interpolated_values = pd.Series(interpolated_values)
                 final = np.array(interpolated_values[:244], dtype=float)
@@ -345,18 +345,18 @@ def plot_waves_single_tuple(freq, db, y_min, y_max):
 
             highest_smoothed_peaks, relevant_troughs = peak_finding(y_values)
 
-            fig.add_trace(go.Scatter(x=np.linspace(0,10, len(y_values)), y=y_values, mode='lines', name=f'{selected_files[idx].split("/")[-1]}'))
+            fig.add_trace(go.Scatter(x=np.linspace(0,10, len(y_values)), y=y_values, mode='lines', name=f'{selected_files[idx].split("/")[-1]}', showlegend=False))
 
             # Mark the highest peaks with red markers
-            fig.add_trace(go.Scatter(x=np.linspace(0,10,len(y_values))[highest_smoothed_peaks], y=y_values[highest_smoothed_peaks], mode='markers', marker=dict(color='red'), name='Peaks'))
+            #fig.add_trace(go.Scatter(x=np.linspace(0,10,len(y_values))[highest_smoothed_peaks], y=y_values[highest_smoothed_peaks], mode='markers', marker=dict(color='red'), name='Peaks'))
 
             # Mark the relevant troughs with blue markers
-            fig.add_trace(go.Scatter(x=np.linspace(0,10,len(y_values))[relevant_troughs], y=y_values[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs'))
+            #fig.add_trace(go.Scatter(x=np.linspace(0,10,len(y_values))[relevant_troughs], y=y_values[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs'))
 
             i+=1
 
     fig.update_layout(width=700, height=450)
-    fig.update_layout(title=f'Freq = {freq}, dB = {db}')
+    #fig.update_layout(title=f'Freq = {freq}, dB = {db}')
     fig.update_layout(xaxis_title='Time (ms)', yaxis_title='Voltage (μV)')
     fig.update_layout(annotations=annotations)
     fig.update_layout(yaxis_range=[y_min, y_max])
@@ -573,7 +573,7 @@ def display_metrics_table_all_db(selected_dfs, freq, db_levels, baseline_level, 
                 final = file_df.loc[index, '0':].dropna()
                 final = pd.to_numeric(final, errors='coerce')
                 if len(final) > 244:
-                    new_points = np.linspace(0, len(final), 244)
+                    new_points = np.linspace(0, len(final), 245)
                     interpolated_values = np.interp(new_points, np.arange(len(final)), final)
                     interpolated_values = pd.Series(interpolated_values)
                     final = np.array(interpolated_values[:244], dtype=float)
@@ -641,8 +641,6 @@ def plot_waves_stacked(df, freq, y_min, y_max, plot_time_warped=False):
         # Initialize an offset for each dB level
         db_offsets = {db: y_min + i * vertical_spacing for i, db in enumerate(unique_dbs)}
 
-        # Find the highest dB level
-        max_db = max(unique_dbs)
 
         try:
             threshold = calculate_hearing_threshold(file_df, freq)
@@ -651,24 +649,29 @@ def plot_waves_stacked(df, freq, y_min, y_max, plot_time_warped=False):
             pass
 
         db_levels = sorted(file_df[db_column].unique(), reverse=True)
+        if db_column == 'PostAtten(dB)':
+            db_levels = sorted(file_df[db_column].unique(), reverse=False)
+        # Find the highest dB level
+        max_db = db_levels[0]
 
         # Get Glasbey color palette
         glasbey_colors = cc.glasbey[:len(db_levels)]
 
         # Process and plot each waveform
-        for i, db in enumerate(sorted(file_df[db_column].unique(), reverse=True)):
+        for i, db in enumerate(db_levels):
             khz = file_df[(file_df['Freq(Hz)'] == freq) & (file_df[db_column] == db)]
 
             if not khz.empty:
-                index = khz.index.values[0]
+                index = khz.index.values[-1]
                 final = file_df.loc[index, '0':]
                 final = pd.to_numeric(final, errors='coerce')[:-1]
 
                 if len(final) > 244:
-                    new_points = np.linspace(0, len(final), 244)
+                    new_points = np.linspace(0, len(final), 245)
                     interpolated_values = np.interp(new_points, np.arange(len(final)), final)
                     interpolated_values = pd.Series(interpolated_values)
                     final = np.array(interpolated_values[:244], dtype=float)
+                    final = pd.to_numeric(final, errors='coerce')
                 if len(final) < 244:
                     original_indices = np.arange(len(final))
                     target_indices = np.linspace(0, len(final) - 1, 244)
@@ -678,7 +681,8 @@ def plot_waves_stacked(df, freq, y_min, y_max, plot_time_warped=False):
 
                 # Normalize the waveform
                 if db == max_db:
-                    max_value = final.abs().max()  # Find the maximum absolute value
+                    max_value = np.max(np.abs(final))  # Find the maximum absolute value
+
                 final_normalized = final / max_value  # Normalize
 
                 # Scale relative to the highest decibel wave
