@@ -659,73 +659,76 @@ def plot_waves_stacked(df, freq, y_min, y_max, plot_time_warped=False):
 
         # Process and plot each waveform
         for i, db in enumerate(db_levels):
-            khz = file_df[(file_df['Freq(Hz)'] == freq) & (file_df[db_column] == db)]
+            try:
+                khz = file_df[(file_df['Freq(Hz)'] == freq) & (file_df[db_column] == db)]
 
-            if not khz.empty:
-                index = khz.index.values[-1]
-                final = file_df.loc[index, '0':]
-                final = pd.to_numeric(final, errors='coerce')[:-1]
+                if not khz.empty:
+                    index = khz.index.values[-1]
+                    final = file_df.loc[index, '0':]
+                    final = pd.to_numeric(final, errors='coerce')[:-1]
 
-                if len(final) > 244:
-                    new_points = np.linspace(0, len(final), 245)
-                    interpolated_values = np.interp(new_points, np.arange(len(final)), final)
-                    interpolated_values = pd.Series(interpolated_values)
-                    final = np.array(interpolated_values[:244], dtype=float)
-                    final = pd.to_numeric(final, errors='coerce')
-                if len(final) < 244:
-                    original_indices = np.arange(len(final))
-                    target_indices = np.linspace(0, len(final) - 1, 244)
-                    cs = CubicSpline(original_indices, final)
-                    smooth_amplitude = cs(target_indices)
-                    final = smooth_amplitude
+                    if len(final) > 244:
+                        new_points = np.linspace(0, len(final), 245)
+                        interpolated_values = np.interp(new_points, np.arange(len(final)), final)
+                        interpolated_values = pd.Series(interpolated_values)
+                        final = np.array(interpolated_values[:244], dtype=float)
+                        final = pd.to_numeric(final, errors='coerce')
+                    if len(final) < 244:
+                        original_indices = np.arange(len(final))
+                        target_indices = np.linspace(0, len(final) - 1, 244)
+                        cs = CubicSpline(original_indices, final)
+                        smooth_amplitude = cs(target_indices)
+                        final = smooth_amplitude
 
-                # Normalize the waveform
-                if db == max_db:
-                    max_value = np.max(np.abs(final))  # Find the maximum absolute value
+                    # Normalize the waveform
+                    if db == max_db:
+                        max_value = np.max(np.abs(final))  # Find the maximum absolute value
 
-                final_normalized = final / max_value  # Normalize
+                    final_normalized = final / max_value  # Normalize
 
-                # Scale relative to the highest decibel wave
-                #final_scaled = final_normalized * (db / max_db)
+                    # Scale relative to the highest decibel wave
+                    #final_scaled = final_normalized * (db / max_db)
 
-                # Apply the vertical offset
-                y_values = final_normalized + db_offsets[db]
+                    # Apply the vertical offset
+                    y_values = final_normalized + db_offsets[db]
 
-                # Optionally apply time warping
-                if plot_time_warped:
-                    # ... (your time warping code here)
-                    pass
+                    # Optionally apply time warping
+                    if plot_time_warped:
+                        # ... (your time warping code here)
+                        pass
 
-                # Plot the waveform
-                color_scale = glasbey_colors[i]
-                fig.add_trace(go.Scatter(x=np.linspace(0, 10, y_values.shape[0]),
-                                        y=y_values,
-                                        mode='lines',
-                                        name=f'{int(db)} dB',
-                                        line=dict(color=color_scale)
-                                        ))
-                if db == threshold:
+                    # Plot the waveform
+                    color_scale = glasbey_colors[i]
                     fig.add_trace(go.Scatter(x=np.linspace(0, 10, y_values.shape[0]),
-                                        y=y_values,
-                                        mode='lines',
-                                        name=f'Thresh:\n{int(db)} dB',
-                                        line=dict(color='black', width = 5),
-                                        showlegend=False
-                                        ))
-                
-                fig.add_annotation(
-                    x=10,  # x-coordinate of the annotation (end of waveform)
-                    y=y_values[-1]+0.5,  # y-coordinate of the annotation (end of waveform)
-                    xref="x",  # specify that x-coordinates refer to the plot's x-axis
-                    yref="y",  # specify that y-coordinates refer to the plot's y-axis
-                    text=f"{int(db)} dB",  # text to be displayed in the annotation
-                    showarrow=False,  # hide arrow of annotation
-                    font=dict(
-                        size=10,  # size of the annotation text
-                        color=color_scale  # color of the annotation text
-                    ),
-                    xanchor="right"
-                )
+                                            y=y_values,
+                                            mode='lines',
+                                            name=f'{int(db)} dB',
+                                            line=dict(color=color_scale)
+                                            ))
+                    if db == threshold:
+                        fig.add_trace(go.Scatter(x=np.linspace(0, 10, y_values.shape[0]),
+                                            y=y_values,
+                                            mode='lines',
+                                            name=f'Thresh:\n{int(db)} dB',
+                                            line=dict(color='black', width = 5),
+                                            showlegend=False
+                                            ))
+                    
+                    fig.add_annotation(
+                        x=10,  # x-coordinate of the annotation (end of waveform)
+                        y=y_values[-1]+0.5,  # y-coordinate of the annotation (end of waveform)
+                        xref="x",  # specify that x-coordinates refer to the plot's x-axis
+                        yref="y",  # specify that y-coordinates refer to the plot's y-axis
+                        text=f"{int(db)} dB",  # text to be displayed in the annotation
+                        showarrow=False,  # hide arrow of annotation
+                        font=dict(
+                            size=10,  # size of the annotation text
+                            color=color_scale  # color of the annotation text
+                        ),
+                        xanchor="right"
+                    )
+            except:
+                pass
 
         fig.update_layout(title=f'{selected_files[idx].split("/")[-1]} - Frequency: {freq} Hz',
                         xaxis_title='Time (ms)',
