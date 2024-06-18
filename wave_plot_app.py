@@ -197,7 +197,7 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
             if not khz.empty:
                 index = khz.index.values[0]
                 final = df_filtered.loc[index, '0':].dropna()
-                final = pd.to_numeric(final, errors='coerce')
+                final = pd.to_numeric(final, errors='coerce').dropna()
 
                 if len(final) > 244:
                     new_points = np.linspace(0, len(final), 245)
@@ -322,7 +322,7 @@ def plot_waves_single_tuple(freq, db, y_min, y_max):
         if not khz.empty:
             index = khz.index.values[0]
             final = file_df.loc[index, '0':].dropna()
-            final = pd.to_numeric(final, errors='coerce')
+            final = pd.to_numeric(final, errors='coerce').dropna()
 
             if len(final) > 244:
                 new_points = np.linspace(0, len(final), 245)
@@ -348,10 +348,10 @@ def plot_waves_single_tuple(freq, db, y_min, y_max):
             fig.add_trace(go.Scatter(x=np.linspace(0,10, len(y_values)), y=y_values, mode='lines', name=f'{selected_files[idx].split("/")[-1]}', showlegend=False))
 
             # Mark the highest peaks with red markers
-            #fig.add_trace(go.Scatter(x=np.linspace(0,10,len(y_values))[highest_smoothed_peaks], y=y_values[highest_smoothed_peaks], mode='markers', marker=dict(color='red'), name='Peaks'))
+            fig.add_trace(go.Scatter(x=np.linspace(0,10,len(y_values))[highest_smoothed_peaks], y=y_values[highest_smoothed_peaks], mode='markers', marker=dict(color='red'), name='Peaks'))
 
             # Mark the relevant troughs with blue markers
-            #fig.add_trace(go.Scatter(x=np.linspace(0,10,len(y_values))[relevant_troughs], y=y_values[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs'))
+            fig.add_trace(go.Scatter(x=np.linspace(0,10,len(y_values))[relevant_troughs], y=y_values[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs'))
 
             i+=1
 
@@ -456,7 +456,7 @@ def plot_3d_surface(df, freq, y_min, y_max):
             if not khz.empty:
                 index = khz.index.values[0]
                 final = df_filtered.loc[index, '0':].dropna()
-                final = pd.to_numeric(final, errors='coerce')
+                final = pd.to_numeric(final, errors='coerce').dropna()
                 if len(final) > 244:
                     new_points = np.linspace(0, len(final), 244)
                     interpolated_values = np.interp(new_points, np.arange(len(final)), final)
@@ -709,7 +709,8 @@ def plot_waves_stacked(df, freq, y_min, y_max, plot_time_warped=False):
                                         y=y_values,
                                         mode='lines',
                                         name=f'Thresh:\n{int(db)} dB',
-                                        line=dict(color='black', width = 5)
+                                        line=dict(color='black', width = 5),
+                                        showlegend=False
                                         ))
                 
                 fig.add_annotation(
@@ -729,7 +730,7 @@ def plot_waves_stacked(df, freq, y_min, y_max, plot_time_warped=False):
         fig.update_layout(title=f'{selected_files[idx].split("/")[-1]} - Frequency: {freq} Hz',
                         xaxis_title='Time (ms)',
                         yaxis_title='Voltage (μV)')
-        fig.update_layout(yaxis_range=[y_min, y_max])
+        #fig.update_layout(yaxis_range=[y_min, y_max])
         # Set custom width and height (in pixels)
         custom_width = 400
         custom_height = 700
@@ -931,7 +932,7 @@ def calculate_hearing_threshold(df, freq):
     for i, db in enumerate(db_levels):
         khz = df_filtered[df_filtered[db_column] == db]
         if not khz.empty:
-            index = khz.index.values[0]
+            index = khz.index.values[-1]
             final = df_filtered.loc[index, '0':].dropna()
             final = pd.to_numeric(final, errors='coerce')
             final = np.array(final, dtype=np.float64)
@@ -963,7 +964,10 @@ def calculate_hearing_threshold(df, freq):
     return threshold
 
 def all_thresholds():
-    df_dict = {'Filename': [], 'Frequency': [], 'Threshold': [], 'Unsupervised Threshold': []}
+    df_dict = {'Filename': [],
+               'Frequency': [],
+               'Threshold': [],
+               'Unsupervised Threshold': []}
     for (file_df, file_name) in zip(selected_dfs, selected_files):
         for hz in distinct_freqs:
             try:
@@ -1048,7 +1052,7 @@ def calculate_unsupervised_threshold(df, freq):
         khz = df[(df['Freq(Hz)'] == freq) & (df[db_column] == db)]
 
         if not khz.empty:
-            index = khz.index.values[0]
+            index = khz.index.values[-1]
             final = df.loc[index, '0':].dropna()
             final = pd.to_numeric(final, errors='coerce')
 
