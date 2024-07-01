@@ -182,7 +182,7 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
             original_waves = []  # Only store original waves if not plotting time warped
         
         try:
-            threshold = calculate_hearing_threshold(file_df, freq)
+            threshold = np.abs(calculate_hearing_threshold(file_df, freq))
         except:
             threshold = None
             st.write("Threshold can't be calculated.")
@@ -224,10 +224,10 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
                     color_scale = glasbey_colors[i]
                     fig.add_trace(go.Scatter(x=np.linspace(0,10, len(y_values)), y=y_values, mode='lines', name=f'{int(db)} dB', line=dict(color=color_scale)))
                     # Mark the highest peaks with red markers
-                    fig.add_trace(go.Scatter(x=np.linspace(0,10,len(y_values))[highest_smoothed_peaks], y=y_values[highest_smoothed_peaks], mode='markers', marker=dict(color='red'), name='Peaks', showlegend=True))
+                    fig.add_trace(go.Scatter(x=np.linspace(0,10,len(y_values))[highest_smoothed_peaks], y=y_values[highest_smoothed_peaks], mode='markers', marker=dict(color='red'), name='Peaks'))#, showlegend=False))
 
                     # Mark the relevant troughs with blue markers
-                    fig.add_trace(go.Scatter(x=np.linspace(0,10,len(y_values))[relevant_troughs], y=y_values[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs'))
+                    fig.add_trace(go.Scatter(x=np.linspace(0,10,len(y_values))[relevant_troughs], y=y_values[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs'))#, showlegend=False))
 
         if plot_time_warped:
             # Convert original waves to a 2D numpy array
@@ -348,10 +348,10 @@ def plot_waves_single_tuple(freq, db, y_min, y_max):
             fig.add_trace(go.Scatter(x=np.linspace(0,10, len(y_values)), y=y_values, mode='lines', name=f'{selected_files[idx].split("/")[-1]}', showlegend=False))
 
             # Mark the highest peaks with red markers
-            fig.add_trace(go.Scatter(x=np.linspace(0,10,len(y_values))[highest_smoothed_peaks], y=y_values[highest_smoothed_peaks], mode='markers', marker=dict(color='red'), name='Peaks'))
+            fig.add_trace(go.Scatter(x=np.linspace(0,10,len(y_values))[highest_smoothed_peaks], y=y_values[highest_smoothed_peaks], mode='markers', marker=dict(color='red'), name='Peaks', showlegend=False))
 
             # Mark the relevant troughs with blue markers
-            fig.add_trace(go.Scatter(x=np.linspace(0,10,len(y_values))[relevant_troughs], y=y_values[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs'))
+            fig.add_trace(go.Scatter(x=np.linspace(0,10,len(y_values))[relevant_troughs], y=y_values[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs', showlegend=False))
 
             i+=1
 
@@ -360,19 +360,19 @@ def plot_waves_single_tuple(freq, db, y_min, y_max):
     fig.update_layout(xaxis_title='Time (ms)', yaxis_title='Voltage (μV)')
     fig.update_layout(annotations=annotations)
     fig.update_layout(yaxis_range=[y_min, y_max])
-    #fig.update_layout(legend=dict(
-    #        x=0.99,
-    #        y=0.99,
-    #        xanchor='right',
-    #        yanchor='top',
-    #        traceorder='normal',
-    #        font=dict(
-    #            size=12,
-    #        ),
-    #        bgcolor='rgba(255, 255, 255, 0.5)',
-    #        bordercolor='Black',
-    #        borderwidth=1
-    #    ))
+    # fig.update_layout(legend=dict(
+    #         x=0.99,
+    #         y=0.99,
+    #         xanchor='right',
+    #         yanchor='top',
+    #         traceorder='normal',
+    #         font=dict(
+    #             size=12,
+    #         ),
+    #         bgcolor='rgba(255, 255, 255, 0.5)',
+    #         bordercolor='Black',
+    #         borderwidth=1
+    #     ))
 
     return fig
 
@@ -571,7 +571,7 @@ def display_metrics_table_all_db(selected_dfs, freq, db_levels, baseline_level, 
             if not khz.empty:
                 index = khz.index.values[0]
                 final = file_df.loc[index, '0':].dropna()
-                final = pd.to_numeric(final, errors='coerce')
+                final = pd.to_numeric(final, errors='coerce').dropna()
                 if len(final) > 244:
                     new_points = np.linspace(0, len(final), 245)
                     interpolated_values = np.interp(new_points, np.arange(len(final)), final)
@@ -589,13 +589,7 @@ def display_metrics_table_all_db(selected_dfs, freq, db_levels, baseline_level, 
                 else:
                     y_values = final
 
-                # Adjust the waveform by subtracting the baseline level
-                y_values -= baseline_level
-
-                try:
-                    highest_peaks, relevant_troughs = peak_finding(y_values)
-                except Exception as e:
-                    continue
+                highest_peaks, relevant_troughs = peak_finding(y_values)
 
                 if highest_peaks.size > 0:  # Check if highest_peaks is not empty
                     first_peak_amplitude = y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]
@@ -729,6 +723,31 @@ def plot_waves_stacked(df, freq, y_min, y_max, plot_time_warped=False):
                     )
             except:
                 pass
+
+        # Add vertical scale bar
+        scale_bar_length = 2/max_value  # Scale bar length representing the pre-normalized voltage
+        scale_bar_x = [10.2, 10.2]  # x-coordinates for the scale bar
+        scale_bar_y = [0, scale_bar_length]  # y-coordinates for the scale bar
+
+        fig.add_trace(go.Scatter(x=scale_bar_x,
+                                 y=scale_bar_y,
+                                 mode='lines',
+                                 line=dict(color='black', width=2),
+                                 showlegend=False))
+
+        # Add scale bar annotation
+        fig.add_annotation(
+            x=10.3,  # x-coordinate for the text
+            y=scale_bar_length / 2,  # y-coordinate for the text (middle of the scale bar)
+            text=f"{2.0:.1f} μV",  # Text for the scale bar
+            showarrow=False,
+            font=dict(
+                size=10,
+                color='black'
+            ),
+            xanchor="left",
+            yanchor="middle"
+        )
 
         fig.update_layout(title=f'{selected_files[idx].split("/")[-1]} - Frequency: {freq} Hz',
                         xaxis_title='Time (ms)',
@@ -929,11 +948,11 @@ def calculate_hearing_threshold(df, freq):
     if db_column == 'Level(dB)':
         db_levels = sorted(df_filtered[db_column].unique())
     if db_column == 'PostAtten(dB)':
-        db_levels = sorted(df_filtered[db_column].unique(), reverse=True)
+        db_levels = sorted(baseline_level - df_filtered[db_column].unique())
     lowest_db = None
     waves = []
     for i, db in enumerate(db_levels):
-        khz = df_filtered[df_filtered[db_column] == db]
+        khz = df_filtered[df_filtered[db_column] == np.abs(db)]
         if not khz.empty:
             index = khz.index.values[-1]
             final = df_filtered.loc[index, '0':].dropna()
@@ -957,10 +976,16 @@ def calculate_hearing_threshold(df, freq):
     y_pred = list(y_pred.flatten())
     for p, d in zip(y_pred, db_levels):
         if p == 0:
-            lowest_db = d
+            if db_column == 'PostAtten(dB)':
+                lowest_db = baseline_level - d
+            else:
+                lowest_db = d
             continue
         else:
-            lowest_db = d
+            if db_column == 'PostAtten(dB)':
+                lowest_db = baseline_level - d
+            else:
+                lowest_db = d
             break
     # Store the lowest dB level where signal was detected
     threshold = lowest_db
@@ -980,7 +1005,14 @@ def all_thresholds():
                 df_dict['Frequency'].append(hz)
                 df_dict['Threshold'].append(thresh)
                 df_dict['Unsupervised Threshold'].append(unsupervised_thresh)
-            except:
+            except ValueError:
+                df_dict = {'Filename': [],
+                            'Frequency': [],
+                            'Threshold': []}
+                thresh = calculate_hearing_threshold(file_df, hz)
+                df_dict['Filename'].append(file_name.split("/")[-1])
+                df_dict['Frequency'].append(hz)
+                df_dict['Threshold'].append(thresh)
                 pass
     threshold_table = pd.DataFrame(df_dict)
     st.dataframe(threshold_table, hide_index=True, use_container_width=True)
