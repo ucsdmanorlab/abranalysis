@@ -219,7 +219,7 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
                 highest_smoothed_peaks, relevant_troughs = peak_finding(y_values)
 
                 if plot_time_warped:
-                    original_waves.append(y_values.to_list()) 
+                    original_waves.append(y_values.tolist()) 
                 else:
                     color_scale = glasbey_colors[i]
                     fig.add_trace(go.Scatter(x=np.linspace(0,10, len(y_values)), y=y_values, mode='lines', name=f'{int(db)} dB', line=dict(color=color_scale)))
