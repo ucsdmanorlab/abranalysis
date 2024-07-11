@@ -25,6 +25,7 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 import colorcet as cc
 import io
+from numpy import AxisError
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -216,6 +217,9 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
                 else:
                     y_values = final
                 
+                if units == 'Nanovolts':
+                    y_values /= 1000
+                
                 highest_smoothed_peaks, relevant_troughs = peak_finding(y_values)
 
                 if plot_time_warped:
@@ -253,12 +257,27 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
             threshold_wave = df_filtered[df_filtered[db_column] == threshold]
             index = threshold_wave.index.values[0]
             final = df_filtered.loc[index, '0':]
-            final = pd.to_numeric(final, errors='coerce')
+            final = pd.to_numeric(final, errors='coerce').dropna()
+
+            if len(final) > 244:
+                new_points = np.linspace(0, len(final), 245)
+                interpolated_values = np.interp(new_points, np.arange(len(final)), final)
+                interpolated_values = pd.Series(interpolated_values)
+                final = np.array(interpolated_values[:244], dtype=float)
+            if len(final) < 244:
+                original_indices = np.arange(len(final))
+                target_indices = np.linspace(0, len(final) - 1, 244)
+                cs = CubicSpline(original_indices, final)
+                smooth_amplitude = cs(target_indices)
+                final = smooth_amplitude
 
             if multiply_y_factor != 1:
                 y_values = final * multiply_y_factor
             else:
                 y_values = final
+            
+            if units == 'Nanovolts':
+                y_values /= 1000
 
             fig.add_trace(go.Scatter(x=np.linspace(0, 10, len(y_values)), y=y_values, mode='lines', name=f'Threshold: {int(threshold)} dB', line=dict(color='black', width=5)))
 
@@ -342,6 +361,9 @@ def plot_waves_single_tuple(freq, db, y_min, y_max):
                 y_values = final * multiply_y_factor
             else:
                 y_values = final
+            
+            if units == 'Nanovolts':
+                y_values /= 1000
 
             highest_smoothed_peaks, relevant_troughs = peak_finding(y_values)
 
@@ -474,6 +496,9 @@ def plot_3d_surface(df, freq, y_min, y_max):
                     y_values = final * multiply_y_factor
                 else:
                     y_values = final
+                
+                if units == 'Nanovolts':
+                    y_values /= 1000
 
                 original_waves.append(y_values.tolist()) 
 
@@ -588,6 +613,9 @@ def display_metrics_table_all_db(selected_dfs, freq, db_levels, baseline_level, 
                     y_values = final * multiply_y_factor
                 else:
                     y_values = final
+                
+                if units == 'Nanovolts':
+                    y_values /= 1000
 
                 highest_peaks, relevant_troughs = peak_finding(y_values)
 
@@ -673,6 +701,9 @@ def plot_waves_stacked(df, freq, y_min, y_max, plot_time_warped=False):
                         cs = CubicSpline(original_indices, final)
                         smooth_amplitude = cs(target_indices)
                         final = smooth_amplitude
+                    
+                    if units == 'Nanovolts':
+                        final /= 1000
 
                     # Normalize the waveform
                     if db == max_db:
@@ -959,14 +990,26 @@ def calculate_hearing_threshold(df, freq):
             final = pd.to_numeric(final, errors='coerce')
             final = np.array(final, dtype=np.float64)
 
-            new_points = np.linspace(0, len(final), 244)
-            interpolated_values = np.interp(new_points, np.arange(len(final)), final)
-            final = pd.Series(interpolated_values)
+            if len(final) > 244:
+                new_points = np.linspace(0, len(final), 245)
+                interpolated_values = np.interp(new_points, np.arange(len(final)), final)
+                interpolated_values = pd.Series(interpolated_values)
+                final = np.array(interpolated_values[:244], dtype=float)
+            if len(final) < 244:
+                original_indices = np.arange(len(final))
+                target_indices = np.linspace(0, len(final) - 1, 244)
+                cs = CubicSpline(original_indices, final)
+                smooth_amplitude = cs(target_indices)
+                final = smooth_amplitude
 
             if multiply_y_factor != 1:
                 y_values = final * multiply_y_factor
             else:
                 y_values = final
+
+            if units == 'Nanovolts':
+                y_values /= 1000
+
             waves.append(y_values)
     waves = np.array(waves)
     waves = np.expand_dims(waves, axis=2)
@@ -999,21 +1042,26 @@ def all_thresholds():
     for (file_df, file_name) in zip(selected_dfs, selected_files):
         for hz in distinct_freqs:
             try:
-                thresh = calculate_hearing_threshold(file_df, hz)
+                thresh = np.nan
+                try:
+                    thresh = calculate_hearing_threshold(file_df, hz)
+                except:
+                    pass
                 unsupervised_thresh = calculate_unsupervised_threshold(file_df, hz)
                 df_dict['Filename'].append(file_name.split("/")[-1])
                 df_dict['Frequency'].append(hz)
                 df_dict['Threshold'].append(thresh)
                 df_dict['Unsupervised Threshold'].append(unsupervised_thresh)
-            except ValueError:
-                df_dict = {'Filename': [],
-                            'Frequency': [],
-                            'Threshold': []}
-                thresh = calculate_hearing_threshold(file_df, hz)
+            except:
+                thresh = np.nan
+                try:
+                    thresh = calculate_hearing_threshold(file_df, hz)
+                except:
+                    pass
                 df_dict['Filename'].append(file_name.split("/")[-1])
                 df_dict['Frequency'].append(hz)
                 df_dict['Threshold'].append(thresh)
-                pass
+                df_dict['Unsupervised Threshold'].append(np.nan)
     threshold_table = pd.DataFrame(df_dict)
     st.dataframe(threshold_table, hide_index=True, use_container_width=True)
     return threshold_table
@@ -1067,6 +1115,7 @@ def peak_finding(wave):
                     relevant_troughs = np.append(relevant_troughs, int(t))
                     break
     relevant_troughs = relevant_troughs.astype('i')
+    print(highest_smoothed_peaks, relevant_troughs)
     return highest_smoothed_peaks, relevant_troughs
 
 def calculate_unsupervised_threshold(df, freq):
@@ -1091,10 +1140,25 @@ def calculate_unsupervised_threshold(df, freq):
             final = df.loc[index, '0':].dropna()
             final = pd.to_numeric(final, errors='coerce')
 
+            if len(final) > 244:
+                new_points = np.linspace(0, len(final), 245)
+                interpolated_values = np.interp(new_points, np.arange(len(final)), final)
+                interpolated_values = pd.Series(interpolated_values)
+                final = np.array(interpolated_values[:244], dtype=float)
+            if len(final) < 244:
+                original_indices = np.arange(len(final))
+                target_indices = np.linspace(0, len(final) - 1, 244)
+                cs = CubicSpline(original_indices, final)
+                smooth_amplitude = cs(target_indices)
+                final = smooth_amplitude
+
             if multiply_y_factor != 1:
                 y_values = final * multiply_y_factor
             else:
                 y_values = final
+            
+            if units == 'Nanovolts':
+                y_values /= 1000
 
             waves_array.append(y_values.tolist())
     # Filter waves and dB values for the specified frequency
@@ -1206,6 +1270,9 @@ if uploaded_files:
     distinct_dbs = sorted(pd.concat([df['Level(dB)'] if level else df['PostAtten(dB)'] for df in dfs]).unique())
     
     multiply_y_factor = st.sidebar.number_input("Multiply Y Values by Factor", value=1.0)
+
+    # Unit dropdown options
+    units = st.sidebar.selectbox("Select Units in Your Data", options=['Microvolts', 'Nanovolts'], index=0)
 
     # Frequency dropdown options
     freq = st.sidebar.selectbox("Select Frequency (Hz)", options=distinct_freqs, index=0)
