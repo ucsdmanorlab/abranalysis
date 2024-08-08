@@ -68,7 +68,6 @@ def plot_wave(fig, x_values, y_values, color, name, marker_color=None):
     if marker_color:
         fig.add_trace(go.Scatter(x=x_values, y=y_values, mode='markers', marker=dict(color=marker_color), name=name, showlegend=False))
 
-
 def calculate_and_plot_wave(df, freq, db, color, threshold=None):
     khz = df[(df['Freq(Hz)'] == freq) & (df[db_column] == db)]
     if not khz.empty:
@@ -76,7 +75,7 @@ def calculate_and_plot_wave(df, freq, db, color, threshold=None):
         final = df.loc[index, '0':].dropna()
         final = pd.to_numeric(final, errors='coerce').dropna()
 
-        target = 244 * (time_scale / 10)
+        target = int(244 * (time_scale / 10))
         
         y_values = interpolate_and_smooth(final, target)  # Original y-values for plotting
         sampling_rate = len(y_values) / time_scale  # Assuming 10 ms duration for 244 points
@@ -112,9 +111,9 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
 
         try:
             threshold = np.abs(calculate_hearing_threshold(file_df, freq))
-        except:
+        except Exception as e:
             threshold = None
-            st.write("Threshold can't be calculated.")
+            st.write("Threshold can't be calculated.", e)
 
         for i, db in enumerate(sorted(db_levels)):
             x_values, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db, glasbey_colors[i])
@@ -173,12 +172,12 @@ def plot_waves_single_tuple(freq, db, y_min, y_max):
         if y_values is not None:
             if return_units == 'Nanovolts':
                 y_values *= 1000
-            fig.add_trace(go.Scatter(x=x_values, y=y_values, mode='lines', name=f'{selected_files[idx].split("/")[-1]}', showlegend=True))
+            fig.add_trace(go.Scatter(x=x_values, y=y_values, mode='lines', name=f'{selected_files[idx].split("/")[-1]}', showlegend=False))
             # Mark the highest peaks with red markers
-            fig.add_trace(go.Scatter(x=x_values[highest_peaks], y=y_values[highest_peaks], mode='markers', marker=dict(color='red'), name='Peaks'))#, showlegend=False))
+            fig.add_trace(go.Scatter(x=x_values[highest_peaks], y=y_values[highest_peaks], mode='markers', marker=dict(color='red'), name='Peaks', showlegend=False))
 
             # Mark the relevant troughs with blue markers
-            fig.add_trace(go.Scatter(x=x_values[relevant_troughs], y=y_values[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs'))#, showlegend=False))
+            fig.add_trace(go.Scatter(x=x_values[relevant_troughs], y=y_values[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs', showlegend=False))
 
     if return_units == 'Nanovolts':
         y_units = 'Voltage (nV)'
@@ -186,9 +185,13 @@ def plot_waves_single_tuple(freq, db, y_min, y_max):
         y_units = 'Voltage (μV)'
 
     fig.update_layout(width=700, height=450)
-    fig.update_layout(xaxis_title='Time (ms)', yaxis_title=y_units)
+    fig.update_layout(xaxis_title='Time (ms)', yaxis_title=y_units, title=f'{selected_files[idx].split("/")[-1]}, Freq = {freq}, db SPL = {db}')
     fig.update_layout(annotations=annotations)
     fig.update_layout(yaxis_range=[y_min, y_max])
+    fig.update_layout(font_family="Times New Roman",
+                      font_color="black",
+                      title_font_family="Times New Roman",
+                      font=dict(size=18))
 
     return fig
 
@@ -305,40 +308,28 @@ def display_metrics_table_all_db(selected_dfs, freqs, db_levels, baseline_level)
                 pass
 
             for db in db_levels:
-                khz = file_df[(file_df['Freq(Hz)'] == freq) & (file_df[db_column] == db)]
-                if not khz.empty:
-                    index = khz.index.values[0]
-                    final = file_df.loc[index, '0':].dropna()
-                    final = pd.to_numeric(final, errors='coerce').dropna()
-                    y_values = interpolate_and_smooth(final)
-
-                    if units == 'Nanovolts':
-                        y_values /= 1000
-
-                    y_values *= multiply_y_factor
-
-                    highest_peaks, relevant_troughs = peak_finding(y_values)
+                _, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db, 'blue')
                     
-                    if return_units == 'Nanovolts':
-                        y_values *= 1000
+                if return_units == 'Nanovolts':
+                    y_values *= 1000
 
-                    if highest_peaks.size > 0:  # Check if highest_peaks is not empty
-                        first_peak_amplitude = y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]
-                        latency_to_first_peak = highest_peaks[0] * (10 / len(y_values))  # Assuming 10 ms duration for waveform
+                if highest_peaks.size > 0:  # Check if highest_peaks is not empty
+                    first_peak_amplitude = y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]
+                    latency_to_first_peak = highest_peaks[0] * (10 / len(y_values))  # Assuming 10 ms duration for waveform
 
-                        if len(highest_peaks) >= 4 and len(relevant_troughs) >= 4:
-                            amplitude_ratio = (y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]) / (
-                                        y_values[highest_peaks[3]] - y_values[relevant_troughs[3]])
-                        else:
-                            amplitude_ratio = np.nan
+                    if len(highest_peaks) >= 4 and len(relevant_troughs) >= 4:
+                        amplitude_ratio = (y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]) / (
+                                    y_values[highest_peaks[3]] - y_values[relevant_troughs[3]])
+                    else:
+                        amplitude_ratio = np.nan
 
-                        metrics_data['File Name'].append(file_name.split("/")[-1])
-                        metrics_data['Frequency (Hz)'].append(freq)
-                        metrics_data['dB Level'].append(db)
-                        metrics_data[f'First Peak Amplitude ({ru})'].append(first_peak_amplitude)
-                        metrics_data['Latency to First Peak (ms)'].append(latency_to_first_peak)
-                        metrics_data['Amplitude Ratio (Peak1/Peak4)'].append(amplitude_ratio)
-                        metrics_data['Estimated Threshold'].append(threshold)
+                    metrics_data['File Name'].append(file_name.split("/")[-1])
+                    metrics_data['Frequency (Hz)'].append(freq)
+                    metrics_data['dB Level'].append(db)
+                    metrics_data[f'First Peak Amplitude ({ru})'].append(first_peak_amplitude)
+                    metrics_data['Latency to First Peak (ms)'].append(latency_to_first_peak)
+                    metrics_data['Amplitude Ratio (Peak1/Peak4)'].append(amplitude_ratio)
+                    metrics_data['Estimated Threshold'].append(threshold)
 
     metrics_table = pd.DataFrame(metrics_data)
     st.dataframe(metrics_table, hide_index=True, use_container_width=True)
@@ -612,7 +603,7 @@ def get_str(data):
         data = data[:ind]
     return data.decode('utf-8')
 
-def calculate_hearing_threshold(df, freq, level=True, baseline_level=100, multiply_y_factor=1):
+def calculate_hearing_threshold(df, freq, baseline_level=100, multiply_y_factor=1):
     db_column = 'Level(dB)' if level else 'PostAtten(dB)'
 
     thresholding_model = load_model('./abr_cnn.keras')
@@ -622,7 +613,7 @@ def calculate_hearing_threshold(df, freq, level=True, baseline_level=100, multip
     df_filtered = df[df['Freq(Hz)'] == freq]
 
     # Get unique dB levels for the filtered DataFrame
-    db_levels = sorted(df_filtered[db_column].unique()) if db_column == 'Level(dB)' else sorted(baseline_level - df_filtered[db_column].unique())
+    db_levels = sorted(df_filtered[db_column].unique()) if db_column == 'Level(dB)' else sorted(df_filtered[db_column].unique(), reverse=True)
     
     lowest_db = None
     waves = []
@@ -648,10 +639,26 @@ def calculate_hearing_threshold(df, freq, level=True, baseline_level=100, multip
 
     for p, d in zip(y_pred, db_levels):
         if p == 0:
-            lowest_db = baseline_level - d if db_column == 'PostAtten(dB)' else d
+            if db_column == 'PostAtten(dB)':
+                calibration_key = (df.name, freq)  # Assuming df has an attribute 'name' set to the file name
+                if calibration_key in calibration_levels:
+                    calibration_level = calibration_levels[calibration_key]
+                else:
+                    calibration_level = 0
+                lowest_db = calibration_level - calibration_level
+            else:
+                lowest_db = d
             continue
         else:
-            lowest_db = baseline_level - d if db_column == 'PostAtten(dB)' else d
+            if db_column == 'PostAtten(dB)':
+                calibration_key = (df.name, freq)
+                if calibration_key in calibration_levels:
+                    calibration_level = calibration_levels[calibration_key]
+                else:
+                    calibration_level = 0
+                lowest_db = calibration_level - calibration_level
+            else:
+                lowest_db = d
             break
     
     return lowest_db
@@ -687,7 +694,6 @@ def all_thresholds():
     threshold_table = pd.DataFrame(df_dict)
     st.dataframe(threshold_table, hide_index=True, use_container_width=True)
     return threshold_table
-
 
 def peak_finding(wave):
     # Prepare waveform
@@ -799,6 +805,53 @@ def calculate_unsupervised_threshold(df, freq):
 
     return min_threshold
 
+def plot_io_curve(df, freqs, db_levels, multiply_y_factor=1.0, units='Microvolts'):
+    db_column = 'Level(dB)'
+    
+    amplitudes = []
+
+    ru = 'μV'
+    if return_units == 'Nanovolts':
+        ru = 'nV'
+
+    for file_df, file_name in zip(selected_dfs, selected_files):
+        for freq in freqs:
+            try:
+                threshold = calculate_hearing_threshold(file_df, freq)
+            except:
+                threshold = np.nan
+                pass
+
+            for db in db_levels:
+                _, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db, 'blue')
+                    
+                if return_units == 'Nanovolts':
+                    y_values *= 1000
+
+                if highest_peaks.size > 0:  # Check if highest_peaks is not empty
+                    first_peak_amplitude = y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]
+                    amplitudes.append(first_peak_amplitude)
+
+    # Plotting
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=db_levels, y=amplitudes, mode='lines+markers', name=f'Freq: {freq} Hz'))
+    
+    fig.update_layout(
+        title=f'I/O Curve for Frequency {freq} Hz',
+        xaxis_title='dB Level',
+        yaxis_title=f'Wave 1 Amplitude ({ru})',
+        xaxis=dict(tickmode='linear', dtick=5),
+        yaxis=dict(range=[min(amplitudes) - 0.1 * abs(min(amplitudes)), max(amplitudes) + 0.1 * abs(max(amplitudes))]),
+        template='plotly_white'
+    )
+    fig.update_layout(font_family="Times New Roman",
+                      font_color="black",
+                      title_font_family="Times New Roman",
+                      font=dict(size=24))
+
+    st.plotly_chart(fig)
+    return fig
+
 # Streamlit UI
 st.title("Wave Plotting App")
 st.sidebar.header("Upload File")
@@ -817,6 +870,7 @@ if uploaded_files:
     dfs = []
     selected_files = []
     selected_dfs = []
+    calibration_levels = {}
     
     for idx, file in enumerate(uploaded_files):
         # Use tempfile
@@ -868,6 +922,7 @@ if uploaded_files:
                 df = pd.read_csv(temp_file_path, skiprows=2)
             
         # Append df to list
+        df.name = file.name
         dfs.append(df)
         if temp_file_path in selected_files:
             selected_dfs.append(df)
@@ -911,6 +966,13 @@ if uploaded_files:
 
     plot_time_warped = st.sidebar.checkbox("Plot Time Warped Curves", False)
 
+    if not level:
+        st.sidebar.subheader("Calibration Levels")
+        for file in selected_files:
+            for hz in distinct_freqs:
+                key = (os.path.basename(file), hz)
+                calibration_levels[key] = st.sidebar.number_input(f"Calibration Level for {os.path.basename(file)} at {hz} Hz", value=0.0)
+
     # Create a plotly figure
     fig = go.Figure()
     
@@ -950,6 +1012,22 @@ if uploaded_files:
 
     if st.sidebar.button("Plot 3D Surface"):
         plot_3d_surface(df, freq, y_min, y_max)
+
+    if st.sidebar.button("Plot I/O Curve"):
+        fig = plot_io_curve(df, [freq], distinct_dbs)
+        # Create an in-memory buffer
+        buffer = io.BytesIO()
+
+        # Save the figure as a pdf to the buffer
+        fig.write_image(file=buffer, format="pdf")
+
+        # Download the pdf from the buffer
+        st.download_button(
+            label="Download PDF",
+            data=buffer,
+            file_name="figure.pdf",
+            mime="application/pdf",
+        )
     
     if st.sidebar.button("Return All Thresholds"):
         all_thresholds()
