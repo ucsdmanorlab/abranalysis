@@ -8,7 +8,7 @@ backports.tempfile==1.0
 scikit-fda
 kneed
 torch
-keras
-tensorflow
+keras==3.3.3
+tensorflow==2.16.1
 matplotlib
 colorcet
