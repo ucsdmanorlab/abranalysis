@@ -606,7 +606,7 @@ def get_str(data):
 def calculate_hearing_threshold(df, freq, baseline_level=100, multiply_y_factor=1):
     db_column = 'Level(dB)' if level else 'PostAtten(dB)'
 
-    thresholding_model = load_model('./abr_cnn.keras')
+    thresholding_model = load_model('./abr_cnn_dropout.keras')
     thresholding_model.steps_per_execution = 1
     
     # Filter DataFrame to include only data for the specified frequency
@@ -617,6 +617,8 @@ def calculate_hearing_threshold(df, freq, baseline_level=100, multiply_y_factor=
     
     lowest_db = None
     waves = []
+    previous_prediction = None  # Initialize previous prediction to track consecutive `1`s
+
     for db in db_levels:
         khz = df_filtered[df_filtered[db_column] == np.abs(db)]
         if not khz.empty:
@@ -633,6 +635,7 @@ def calculate_hearing_threshold(df, freq, baseline_level=100, multiply_y_factor=
     
     waves = np.array(waves)
     waves = np.expand_dims(waves, axis=2)
+    
     # Perform prediction
     prediction = thresholding_model.predict(waves)
     y_pred = (prediction > 0.5).astype(int).flatten()
@@ -645,23 +648,26 @@ def calculate_hearing_threshold(df, freq, baseline_level=100, multiply_y_factor=
                     calibration_level = calibration_levels[calibration_key]
                 else:
                     calibration_level = 0
-                lowest_db = calibration_level - calibration_level
+                lowest_db = baseline_level - (d + calibration_level)
             else:
                 lowest_db = d
-            continue
+            previous_prediction = p  # Update previous prediction
         else:
+            if previous_prediction == 1:
+                break  # Break if two consecutive `1`s are encountered
             if db_column == 'PostAtten(dB)':
                 calibration_key = (df.name, freq)
                 if calibration_key in calibration_levels:
                     calibration_level = calibration_levels[calibration_key]
                 else:
                     calibration_level = 0
-                lowest_db = calibration_level - calibration_level
+                lowest_db = baseline_level - (d + calibration_level)
             else:
                 lowest_db = d
-            break
+            previous_prediction = p  # Update previous prediction
     
     return lowest_db
+
 
 def all_thresholds():
     df_dict = {'Filename': [],
