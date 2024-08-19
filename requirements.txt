@@ -12,3 +12,4 @@ keras==3.3.3
 tensorflow==2.16.1
 matplotlib
 colorcet
+kaleido
