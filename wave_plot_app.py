@@ -15,6 +15,7 @@ from skfda.preprocessing.dim_reduction import FPCA
 from sklearn.cluster import DBSCAN
 from kneed import KneeLocator
 from sklearn.neighbors import NearestNeighbors
+from sklearn.preprocessing import StandardScaler
 from scipy.ndimage import gaussian_filter1d
 import torch
 import torch.nn as nn
@@ -91,7 +92,7 @@ def calculate_and_plot_wave(df, freq, db, color, threshold=None):
         highest_peaks, relevant_troughs = peak_finding(y_values_for_peak_finding)
 
         return x_values, y_values, highest_peaks, relevant_troughs
-    return None, None, None
+    return None, None, None, None
 
 def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
     db_column = 'Level(dB)' if level else 'PostAtten(dB)'
@@ -297,7 +298,7 @@ def display_metrics_table_all_db(selected_dfs, freqs, db_levels, baseline_level)
     if return_units == 'Nanovolts':
         ru = 'nV'
         
-    metrics_data = {'File Name': [], 'Frequency (Hz)': [], 'dB Level': [], f'First Peak Amplitude ({ru})': [], 'Latency to First Peak (ms)': [], 'Amplitude Ratio (Peak1/Peak4)': [], 'Estimated Threshold': []}
+    metrics_data = {'File Name': [], 'Frequency (Hz)': [], 'dB Level': [], f'Wave I amplitude (P1-T1) ({ru})': [], 'Latency to First Peak (ms)': [], 'Amplitude Ratio (Peak1/Peak4)': [], 'Estimated Threshold': []}
 
     for file_df, file_name in zip(selected_dfs, selected_files):
         for freq in freqs:
@@ -313,23 +314,24 @@ def display_metrics_table_all_db(selected_dfs, freqs, db_levels, baseline_level)
                 if return_units == 'Nanovolts':
                     y_values *= 1000
 
-                if highest_peaks.size > 0:  # Check if highest_peaks is not empty
-                    first_peak_amplitude = y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]
-                    latency_to_first_peak = highest_peaks[0] * (10 / len(y_values))  # Assuming 10 ms duration for waveform
+                if highest_peaks is not None:
+                    if highest_peaks.size > 0:  # Check if highest_peaks is not empty
+                        first_peak_amplitude = y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]
+                        latency_to_first_peak = highest_peaks[0] * (10 / len(y_values))  # Assuming 10 ms duration for waveform
 
-                    if len(highest_peaks) >= 4 and len(relevant_troughs) >= 4:
-                        amplitude_ratio = (y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]) / (
-                                    y_values[highest_peaks[3]] - y_values[relevant_troughs[3]])
-                    else:
-                        amplitude_ratio = np.nan
+                        if len(highest_peaks) >= 4 and len(relevant_troughs) >= 4:
+                            amplitude_ratio = (y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]) / (
+                                        y_values[highest_peaks[3]] - y_values[relevant_troughs[3]])
+                        else:
+                            amplitude_ratio = np.nan
 
-                    metrics_data['File Name'].append(file_name.split("/")[-1])
-                    metrics_data['Frequency (Hz)'].append(freq)
-                    metrics_data['dB Level'].append(db)
-                    metrics_data[f'First Peak Amplitude ({ru})'].append(first_peak_amplitude)
-                    metrics_data['Latency to First Peak (ms)'].append(latency_to_first_peak)
-                    metrics_data['Amplitude Ratio (Peak1/Peak4)'].append(amplitude_ratio)
-                    metrics_data['Estimated Threshold'].append(threshold)
+                        metrics_data['File Name'].append(file_name.split("/")[-1])
+                        metrics_data['Frequency (Hz)'].append(freq)
+                        metrics_data['dB Level'].append(db)
+                        metrics_data[f'Wave I amplitude (P1-T1) ({ru})'].append(first_peak_amplitude)
+                        metrics_data['Latency to First Peak (ms)'].append(latency_to_first_peak)
+                        metrics_data['Amplitude Ratio (Peak1/Peak4)'].append(amplitude_ratio)
+                        metrics_data['Estimated Threshold'].append(threshold)
 
     metrics_table = pd.DataFrame(metrics_data)
     st.dataframe(metrics_table, hide_index=True, use_container_width=True)
@@ -606,7 +608,7 @@ def get_str(data):
 def calculate_hearing_threshold(df, freq, baseline_level=100, multiply_y_factor=1):
     db_column = 'Level(dB)' if level else 'PostAtten(dB)'
 
-    thresholding_model = load_model('./abr_cnn_dropout.keras')
+    thresholding_model = load_model('./abr_cnn_aug_norm_opt.keras')
     thresholding_model.steps_per_execution = 1
     
     # Filter DataFrame to include only data for the specified frequency
@@ -634,7 +636,10 @@ def calculate_hearing_threshold(df, freq, baseline_level=100, multiply_y_factor=
             waves.append(final)
     
     waves = np.array(waves)
-    waves = np.expand_dims(waves, axis=2)
+    flattened_data = waves.flatten().reshape(-1, 1)
+    scaler = StandardScaler()
+    scaled_flattened_data = scaler.fit_transform(flattened_data).reshape(waves.shape)
+    waves = np.expand_dims(scaled_flattened_data, axis=2)
     
     # Perform prediction
     prediction = thresholding_model.predict(waves)
@@ -667,7 +672,6 @@ def calculate_hearing_threshold(df, freq, baseline_level=100, multiply_y_factor=
             previous_prediction = p  # Update previous prediction
     
     return lowest_db
-
 
 def all_thresholds():
     df_dict = {'Filename': [],
@@ -834,9 +838,10 @@ def plot_io_curve(df, freqs, db_levels, multiply_y_factor=1.0, units='Microvolts
                 if return_units == 'Nanovolts':
                     y_values *= 1000
 
-                if highest_peaks.size > 0:  # Check if highest_peaks is not empty
-                    first_peak_amplitude = y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]
-                    amplitudes.append(first_peak_amplitude)
+                if highest_peaks is not None:
+                    if highest_peaks.size > 0:  # Check if highest_peaks is not empty
+                        first_peak_amplitude = y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]
+                        amplitudes.append(first_peak_amplitude)
 
     # Plotting
     fig = go.Figure()
@@ -863,6 +868,12 @@ st.title("Wave Plotting App")
 st.sidebar.header("Upload File")
 uploaded_files = st.sidebar.file_uploader("Choose a file", type=["csv", "arf"], accept_multiple_files=True)
 is_rz_file = st.sidebar.radio("Select ARF File Type:", ("RP", "RZ"))
+is_click = st.sidebar.radio("Click or Tone? (for .arf files)", ("Click", "Tone"))
+click = None
+if is_click == "Click":
+    click = True
+else:
+    click = False
 is_level = st.sidebar.radio("Select dB You Are Studying:", ("Attenuation", "Level"))
 
 annotations = []
@@ -904,8 +915,12 @@ if uploaded_files:
             for group in data['groups']:
                 for rec in group['recs']:
                     # Extract data
-                    freq = rec['Var1']
-                    db = rec['Var2']
+                    if not click:
+                        freq = rec['Var1']
+                        db = rec['Var2']
+                    else:
+                        freq = 'Click'
+                        db = rec['Var1']
                     
                     # Construct row  
                     wave_cols = list(enumerate(rec['data']))
