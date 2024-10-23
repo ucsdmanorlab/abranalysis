@@ -1,0 +1,15 @@
+streamlit
+fdasrsf
+plotly==5.18.0
+pandas==2.1.1
+numpy==1.26.3
+scipy
+backports.tempfile==1.0
+scikit-fda
+kneed
+torch
+keras==3.3.3
+tensorflow==2.16.1
+matplotlib
+colorcet
+kaleido
