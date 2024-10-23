@@ -610,7 +610,7 @@ def get_str(data):
 def calculate_hearing_threshold(df, freq, baseline_level=100, multiply_y_factor=1):
     db_column = 'Level(dB)' if level else 'PostAtten(dB)'
 
-    thresholding_model = load_model('./code/abr_cnn_aug_norm_opt.keras')
+    thresholding_model = load_model('./models/abr_cnn_aug_norm_opt.keras')
     thresholding_model.steps_per_execution = 1
     
     # Filter DataFrame to include only data for the specified frequency
@@ -881,7 +881,7 @@ is_level = st.sidebar.radio("Select dB You Are Studying:", ("Level", "Attenuatio
 annotations = []
 
 peak_finding_model = CNN()
-model_loader = torch.load('./code/waveI_cnn_model.pth')
+model_loader = torch.load('./models/waveI_cnn_model.pth')
 peak_finding_model.load_state_dict(model_loader)
 peak_finding_model.eval()
 
