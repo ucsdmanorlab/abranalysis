@@ -81,7 +81,7 @@ def calculate_and_plot_wave(df, freq, db, color, threshold=None):
         target = int(244 * (time_scale / 10))
         
         y_values = interpolate_and_smooth(final, target)  # Original y-values for plotting
-        sampling_rate = len(y_values) / time_scale  # Assuming 10 ms duration for 244 points
+        sampling_rate = len(y_values) / time_scale
 
         x_values = np.linspace(0, len(y_values) / sampling_rate, len(y_values))
 
@@ -630,7 +630,9 @@ def calculate_hearing_threshold(df, freq, baseline_level=100, multiply_y_factor=
             final = df_filtered.loc[index, '0':].dropna()
             final = pd.to_numeric(final, errors='coerce')
             final = np.array(final, dtype=np.float64)
-            final = interpolate_and_smooth(final)
+            target = int(244 * (time_scale / 10))
+            y_values = interpolate_and_smooth(final, target)
+            final = interpolate_and_smooth(final[:244])
 
             if units == 'Nanovolts':
                 final /= 1000
