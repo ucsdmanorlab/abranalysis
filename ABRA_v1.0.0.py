@@ -66,7 +66,7 @@ def interpolate_and_smooth(final, target_length=244):
         cs = CubicSpline(original_indices, final)
         final = cs(target_indices)
     if invert == True:
-        final = final[::-1]
+        final = final * -1
     return final
 
 def plot_wave(fig, x_values, y_values, color, name, marker_color=None):
