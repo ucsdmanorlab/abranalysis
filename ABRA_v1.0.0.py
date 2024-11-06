@@ -450,23 +450,23 @@ def plot_waves_stacked(freq):
                 st.write(f"Error processing dB level {db}: {e}")
 
         # Add vertical scale bar
-        if max_value and y_min >= -5 and y_min <= 1:
-            scale_bar_length = 2 / max_value
-            fig.add_trace(go.Scatter(x=[10.2, 10.2],
-                                     y=[0, scale_bar_length],
-                                     mode='lines',
-                                     line=dict(color='black', width=2),
-                                     showlegend=False))
+        # if max_value and y_min >= -5 and y_min <= 1:
+        #     scale_bar_length = 2 / max_value
+        #     fig.add_trace(go.Scatter(x=[10.2, 10.2],
+        #                              y=[0, scale_bar_length],
+        #                              mode='lines',
+        #                              line=dict(color='black', width=2),
+        #                              showlegend=False))
 
-            fig.add_annotation(
-                x=10.3,
-                y=scale_bar_length / 2,
-                text=f"{2.0:.1f} μV",
-                showarrow=False,
-                font=dict(size=10, color='black'),
-                xanchor="left",
-                yanchor="middle"
-            )
+        #     fig.add_annotation(
+        #         x=10.3,
+        #         y=scale_bar_length / 2,
+        #         text=f"{2.0:.1f} μV",
+        #         showarrow=False,
+        #         font=dict(size=10, color='black'),
+        #         xanchor="left",
+        #         yanchor="middle"
+        #     )
 
         fig.update_layout(title=f'{selected_files[idx].split("/")[-1]} - Frequency: {freq} Hz',
                           xaxis_title='Time (ms)',
@@ -902,11 +902,6 @@ if is_click == "Click":
 else:
     click = False
 is_level = st.sidebar.radio("Select dB You Are Studying:", ("Level", "Attenuation"))
-is_invert = st.sidebar.checkbox("Invert Waveforms")
-if is_invert == True:
-    invert = True
-else:
-    invert = False
 
 annotations = []
 
@@ -920,7 +915,14 @@ if uploaded_files:
     selected_files = []
     selected_dfs = []
     calibration_levels = {}
+
+    is_invert = st.sidebar.checkbox("Invert Waveforms")
+    if is_invert == True:
+        invert = True
+    else:
+        invert = False
     
+    st.sidebar.write("Select files to analyze:")
     for idx, file in enumerate(uploaded_files):
         # Use tempfile
         temp_file_path = os.path.join(tempfile.gettempdir(), file.name)
