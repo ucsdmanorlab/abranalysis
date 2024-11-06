@@ -703,31 +703,17 @@ def calculate_hearing_threshold(df, freq, baseline_level=100, multiply_y_factor=
 def all_thresholds():
     df_dict = {'Filename': [],
                'Frequency': [],
-               'Threshold': [],
-               'Unsupervised Threshold': []}
+               'Threshold': []}
     for (file_df, file_name) in zip(selected_dfs, selected_files):
         for hz in distinct_freqs:
+            thresh = np.nan
             try:
-                thresh = np.nan
-                try:
-                    thresh = calculate_hearing_threshold(file_df, hz)
-                except:
-                    pass
-                unsupervised_thresh = calculate_unsupervised_threshold(file_df, hz)
-                df_dict['Filename'].append(file_name.split("/")[-1])
-                df_dict['Frequency'].append(hz)
-                df_dict['Threshold'].append(thresh)
-                df_dict['Unsupervised Threshold'].append(unsupervised_thresh)
+                thresh = calculate_hearing_threshold(file_df, hz)
             except:
-                thresh = np.nan
-                try:
-                    thresh = calculate_hearing_threshold(file_df, hz)
-                except:
-                    pass
-                df_dict['Filename'].append(file_name.split("/")[-1])
-                df_dict['Frequency'].append(hz)
-                df_dict['Threshold'].append(thresh)
-                df_dict['Unsupervised Threshold'].append(np.nan)
+                pass
+            df_dict['Filename'].append(file_name.split("/")[-1])
+            df_dict['Frequency'].append(hz)
+            df_dict['Threshold'].append(thresh)
     threshold_table = pd.DataFrame(df_dict)
     st.dataframe(threshold_table, hide_index=True, use_container_width=True)
     return threshold_table
