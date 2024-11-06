@@ -60,10 +60,13 @@ def interpolate_and_smooth(final, target_length=244):
         interpolated_values = np.interp(new_points, np.arange(len(final)), final)
         final = np.array(interpolated_values[:target_length], dtype=float)
     elif len(final) < target_length:
+        st.write(final)
         original_indices = np.arange(len(final))
         target_indices = np.linspace(0, len(final) - 1, target_length)
         cs = CubicSpline(original_indices, final)
         final = cs(target_indices)
+    if invert == True:
+        final = final[::-1]
     return final
 
 def plot_wave(fig, x_values, y_values, color, name, marker_color=None):
@@ -899,6 +902,11 @@ if is_click == "Click":
 else:
     click = False
 is_level = st.sidebar.radio("Select dB You Are Studying:", ("Level", "Attenuation"))
+is_invert = st.sidebar.checkbox("Invert Waveforms")
+if is_invert == True:
+    invert = True
+else:
+    invert = False
 
 annotations = []
 
