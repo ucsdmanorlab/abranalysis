@@ -65,8 +65,6 @@ def interpolate_and_smooth(final, target_length=244):
         target_indices = np.linspace(0, len(final) - 1, target_length)
         cs = CubicSpline(original_indices, final)
         final = cs(target_indices)
-    if invert == True:
-        final = final * -1
     return final
 
 def plot_wave(fig, x_values, y_values, color, name, marker_color=None):
@@ -404,6 +402,7 @@ def plot_waves_stacked(freq):
                     final = file_df.loc[index, '0':].dropna()
                     final = pd.to_numeric(final, errors='coerce')
                     final = interpolate_and_smooth(final)
+                    final *= multiply_y_factor
 
                     if units == 'Nanovolts':
                         final /= 1000
@@ -665,6 +664,7 @@ def calculate_hearing_threshold(df, freq, baseline_level=100, multiply_y_factor=
             target = int(244 * (time_scale / 10))
             y_values = interpolate_and_smooth(final, target)
             final = interpolate_and_smooth(final[:244])
+            final *= multiply_y_factor
 
             if units == 'Nanovolts':
                 final /= 1000
@@ -720,7 +720,7 @@ def all_thresholds():
 
 def peak_finding(wave):
     # Prepare waveform
-    waveform=interpolate_and_smooth(wave)
+    waveform = interpolate_and_smooth(wave)
     waveform_torch = torch.tensor(waveform, dtype=torch.float32).unsqueeze(0)
     
     # Get prediction from model
@@ -728,7 +728,7 @@ def peak_finding(wave):
     prediction = int(round(outputs.detach().numpy()[0][0], 0))
 
     # Apply Gaussian smoothing
-    smoothed_waveform = gaussian_filter1d(waveform, sigma=1)
+    smoothed_waveform = gaussian_filter1d(wave, sigma=1)
 
     # Find peaks and troughs
     n = 18
@@ -902,11 +902,6 @@ if uploaded_files:
     selected_dfs = []
     calibration_levels = {}
 
-    is_invert = st.sidebar.checkbox("Invert Waveforms")
-    if is_invert == True:
-        invert = True
-    else:
-        invert = False
     
     st.sidebar.write("Select files to analyze:")
     for idx, file in enumerate(uploaded_files):
