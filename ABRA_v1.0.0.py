@@ -15,7 +15,7 @@ from skfda.preprocessing.dim_reduction import FPCA
 from sklearn.cluster import DBSCAN
 from kneed import KneeLocator
 from sklearn.neighbors import NearestNeighbors
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from scipy.ndimage import gaussian_filter1d
 import torch
 import torch.nn as nn
@@ -644,7 +644,7 @@ def get_str(data):
 def calculate_hearing_threshold(df, freq, baseline_level=100, multiply_y_factor=1):
     db_column = 'Level(dB)' if level else 'PostAtten(dB)'
 
-    thresholding_model = load_model('models/abr_cnn_aug_norm_opt.keras')
+    thresholding_model = load_model('models/abr_cnn_aug_norm_std_exmarcotti.keras')
     thresholding_model.steps_per_execution = 1
     
     # Filter DataFrame to include only data for the specified frequency
@@ -674,8 +674,12 @@ def calculate_hearing_threshold(df, freq, baseline_level=100, multiply_y_factor=
     waves = np.array(waves)
     flattened_data = waves.flatten().reshape(-1, 1)
     scaler = StandardScaler()
-    scaled_flattened_data = scaler.fit_transform(flattened_data).reshape(waves.shape)
-    waves = np.expand_dims(scaled_flattened_data, axis=2)
+    standardized_data = scaler.fit_transform(flattened_data)
+
+    # Step 2: Apply min-max scaling
+    min_max_scaler = MinMaxScaler(feature_range=(0, 1))  # Adjust range if needed
+    scaled_data = min_max_scaler.fit_transform(standardized_data).reshape(waves.shape)
+    waves = np.expand_dims(scaled_data, axis=2)
     
     # Perform prediction
     prediction = thresholding_model.predict(waves)
@@ -688,6 +692,7 @@ def calculate_hearing_threshold(df, freq, baseline_level=100, multiply_y_factor=
 
     lowest_db = db_levels[0]
     previous_prediction = None
+
 
     for p, d in zip(y_pred, db_levels):
         if p == 0:
