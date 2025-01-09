@@ -928,7 +928,7 @@ is_level = st.sidebar.radio("Select dB You Are Studying:", ("Level", "Attenuatio
 annotations = []
 
 peak_finding_model = CNN()
-model_loader = torch.load('./models/waveI_cnn_model.pth')
+model_loader = torch.load('./models/waveI_cnn_model_exp2.pth')
 peak_finding_model.load_state_dict(model_loader)
 peak_finding_model.eval()
 
