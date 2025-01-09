@@ -42,11 +42,13 @@ class CNN(nn.Module):
         self.fc1 = nn.Linear(32 * 61, 128)
         self.fc2 = nn.Linear(128, 1)
         self.dropout = nn.Dropout(dropout_prob)
+        self.batch_norm1 = nn.BatchNorm1d(16)
+        self.batch_norm2 = nn.BatchNorm1d(32)
 
     def forward(self, x):
-        x = self.pool(nn.functional.relu(self.conv1(x)))
+        x = self.pool(nn.functional.relu(self.batch_norm1(self.conv1(x))))
         x = self.dropout(x)
-        x = self.pool(nn.functional.relu(self.conv2(x)))
+        x = self.pool(nn.functional.relu(self.batch_norm2(self.conv2(x))))
         x = self.dropout(x)
         x = x.view(-1, 32 * 61)
         x = nn.functional.relu(self.fc1(x))
@@ -87,13 +89,39 @@ def calculate_and_plot_wave(df, freq, db, color, threshold=None):
 
         x_values = np.linspace(0, len(y_values) / sampling_rate, len(y_values))
 
-        y_values_for_peak_finding = interpolate_and_smooth(final[:244])
+        y_values = interpolate_and_smooth(final[:244])
         if units == 'Nanovolts':
             y_values /= 1000
 
-        y_values_for_peak_finding *= multiply_y_factor
+        y_values *= multiply_y_factor
 
-        highest_peaks, relevant_troughs = peak_finding(y_values_for_peak_finding)
+        fpf = df[(df['Freq(Hz)'] == freq)].loc[:, '0':]
+
+        # Flatten the data to scale all values across the group
+        flattened_data = fpf.values.flatten().reshape(-1, 1)
+
+        # Step 1: Standardize the data
+        scaler = StandardScaler()
+        standardized_data = scaler.fit_transform(flattened_data)
+
+        # Step 2: Apply min-max scaling
+        min_max_scaler = MinMaxScaler(feature_range=(0, 1))
+        scaled_data = min_max_scaler.fit_transform(standardized_data).reshape(fpf.shape)
+
+        # Reshape back to the original shape and update the group
+        fpf[fpf.columns] = scaled_data
+
+        finalfpf = fpf.loc[index, '0':].dropna()
+        finalfpf = pd.to_numeric(finalfpf, errors='coerce').dropna()
+
+        target = int(244 * (time_scale / 10))
+        
+        y_values_fpf = interpolate_and_smooth(finalfpf, target)  # Original y-values for plotting
+        sampling_rate = len(y_values) / time_scale
+
+        y_values_fpf = interpolate_and_smooth(finalfpf[:244])
+
+        highest_peaks, relevant_troughs = peak_finding(y_values_fpf)
 
         return x_values, y_values, highest_peaks, relevant_troughs
     return None, None, None, None
@@ -644,7 +672,7 @@ def get_str(data):
 def calculate_hearing_threshold(df, freq, baseline_level=100, multiply_y_factor=1):
     db_column = 'Level(dB)' if level else 'PostAtten(dB)'
 
-    thresholding_model = load_model('models/abr_cnn_aug_norm_std_exmarcotti.keras')
+    thresholding_model = load_model('models/abr_cnn_aug_norm_std.keras')
     thresholding_model.steps_per_execution = 1
     
     # Filter DataFrame to include only data for the specified frequency
@@ -726,19 +754,19 @@ def all_thresholds():
 def peak_finding(wave):
     # Prepare waveform
     waveform = interpolate_and_smooth(wave)
-    waveform_torch = torch.tensor(waveform, dtype=torch.float32).unsqueeze(0)
+    waveform_torch = torch.tensor(waveform, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
     
     # Get prediction from model
     outputs = peak_finding_model(waveform_torch)
     prediction = int(round(outputs.detach().numpy()[0][0], 0))
 
     # Apply Gaussian smoothing
-    smoothed_waveform = gaussian_filter1d(wave, sigma=1)
+    smoothed_waveform = gaussian_filter1d(wave, sigma=1.5)
 
     # Find peaks and troughs
     n = 18
-    t = 14
-    start_point = prediction - 9
+    t = 8
+    start_point = prediction - 7
     smoothed_peaks, _ = find_peaks(smoothed_waveform[start_point:], distance=n)
     smoothed_troughs, _ = find_peaks(-smoothed_waveform, distance=t)
     sorted_indices = np.argsort(smoothed_waveform[smoothed_peaks+start_point])
@@ -863,7 +891,10 @@ def plot_io_curve(df, freqs, db_levels, multiply_y_factor=1.0, units='Microvolts
 
     # Plotting
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=np.full(len(db_levels), calibration_levels[(file_df.name, freq)]) - db_levels, y=amplitudes, mode='lines+markers', name=f'Freq: {freq} Hz'))
+    if level:
+        fig.add_trace(go.Scatter(x=np.full(len(db_levels), db_levels), y=amplitudes, mode='lines+markers', name=f'Freq: {freq} Hz'))
+    else:
+        fig.add_trace(go.Scatter(x=np.full(len(db_levels), calibration_levels[(file_df.name, freq)]) - db_levels, y=amplitudes, mode='lines+markers', name=f'Freq: {freq} Hz'))
     
     fig.update_layout(
         title=f'I/O Curve for Frequency {freq} Hz',
