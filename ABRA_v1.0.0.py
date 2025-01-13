@@ -926,7 +926,10 @@ def plot_io_curve(df, freqs, db_levels, multiply_y_factor=1.0, units='Microvolts
                 if highest_peaks is not None:
                     if highest_peaks.size > 0:  # Check if highest_peaks is not empty
                         first_peak_amplitude = y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]
-                        amplitudes[db] = first_peak_amplitude
+                        if level:
+                            amplitudes[db] = first_peak_amplitude
+                        else:
+                            amplitudes[calibration_levels[(file_df.name, freq)] - int(db)] = first_peak_amplitude
 
             # Plotting
             fig = go.Figure()
