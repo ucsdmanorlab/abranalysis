@@ -959,7 +959,7 @@ def plot_io_curve(df, freqs, db_levels, multiply_y_factor=1.0, units='Microvolts
 st.title("Wave Plotting App")
 st.sidebar.header("Upload File")
 uploaded_files = st.sidebar.file_uploader("Choose a file", type=["csv", "arf"], accept_multiple_files=True)
-is_rz_file = st.sidebar.radio("Select ARF File Type:", ("RP", "RZ"))
+is_rz_file = st.sidebar.radio("Select ARF File Type:", ("RZ", "RP"))
 is_click = st.sidebar.radio("Click or Tone? (for .arf files)", ("Click", "Tone"))
 click = None
 if is_click == "Click":
