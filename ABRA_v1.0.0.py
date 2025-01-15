@@ -216,7 +216,10 @@ def plot_waves_single_tuple(freq, db, y_min, y_max):
     db_column = 'Level(dB)' if level else 'PostAtten(dB)'
 
     for idx, file_df in enumerate(selected_dfs):
-        x_values, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db, 'blue')
+        if db_column == 'Level(dB)':
+            x_values, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db, 'blue')
+        else:
+            x_values, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db, 'blue')
 
         if y_values is not None:
             if return_units == 'Nanovolts':
@@ -235,7 +238,10 @@ def plot_waves_single_tuple(freq, db, y_min, y_max):
         y_units = 'Voltage (μV)'
 
     fig.update_layout(width=700, height=450)
-    fig.update_layout(xaxis_title='Time (ms)', yaxis_title=y_units, title=f'{selected_files[idx].split("/")[-1]}, Freq = {freq}, db = {db}')
+    if level:
+        fig.update_layout(xaxis_title='Time (ms)', yaxis_title=y_units, title=f'{selected_files[idx].split("/")[-1]}, Freq = {freq}, db = {db}')
+    else:
+        fig.update_layout(xaxis_title='Time (ms)', yaxis_title=y_units, title=f'{selected_files[idx].split("/")[-1]}, Freq = {freq}, db = {calibration_levels[(file_df.name, freq)] - int(db)}')
     fig.update_layout(annotations=annotations)
     fig.update_layout(yaxis_range=[y_min, y_max])
     fig.update_layout(font_family="Times New Roman",
