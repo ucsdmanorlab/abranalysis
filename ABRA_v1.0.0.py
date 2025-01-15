@@ -162,11 +162,12 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
                 else:
                     fig.add_trace(go.Scatter(x=x_values, y=y_values, mode='lines', name=f'{calibration_levels[(file_df.name, freq)] - int(db)} dB', line=dict(color=glasbey_colors[i])))
 
-                # Mark the highest peaks with red markers
-                fig.add_trace(go.Scatter(x=x_values[highest_peaks], y=y_values[highest_peaks], mode='markers', marker=dict(color='red'), name='Peaks'))#, showlegend=False))
+                if show_peaks:
+                    # Mark the highest peaks with red markers
+                    fig.add_trace(go.Scatter(x=x_values[highest_peaks], y=y_values[highest_peaks], mode='markers', marker=dict(color='red'), name='Peaks', showlegend=show_legend))
 
-                # Mark the relevant troughs with blue markers
-                fig.add_trace(go.Scatter(x=x_values[relevant_troughs], y=y_values[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs'))#, showlegend=False))
+                    # Mark the relevant troughs with blue markers
+                    fig.add_trace(go.Scatter(x=x_values[relevant_troughs], y=y_values[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs', showlegend=show_legend))
 
                 if plot_time_warped:
                     original_waves.append(y_values.tolist())
@@ -221,11 +222,12 @@ def plot_waves_single_tuple(freq, db, y_min, y_max):
             if return_units == 'Nanovolts':
                 y_values *= 1000
             fig.add_trace(go.Scatter(x=x_values, y=y_values, mode='lines', name=f'{selected_files[idx].split("/")[-1]}'))#, showlegend=False))
-            # Mark the highest peaks with red markers
-            fig.add_trace(go.Scatter(x=x_values[highest_peaks], y=y_values[highest_peaks], mode='markers', marker=dict(color='red'), name='Peaks'))#, showlegend=False))
+            if show_peaks:
+                # Mark the highest peaks with red markers
+                fig.add_trace(go.Scatter(x=x_values[highest_peaks], y=y_values[highest_peaks], mode='markers', marker=dict(color='red'), name='Peaks'))#, showlegend=False))
 
-            # Mark the relevant troughs with blue markers
-            fig.add_trace(go.Scatter(x=x_values[relevant_troughs], y=y_values[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs'))#, showlegend=False))
+                # Mark the relevant troughs with blue markers
+                fig.add_trace(go.Scatter(x=x_values[relevant_troughs], y=y_values[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs'))#, showlegend=False))
 
     if return_units == 'Nanovolts':
         y_units = 'Voltage (nV)'
@@ -240,6 +242,7 @@ def plot_waves_single_tuple(freq, db, y_min, y_max):
                       font_color="black",
                       title_font_family="Times New Roman",
                       font=dict(size=18))
+    fig.update_layout(showlegend=show_legend)
 
     return fig
 
@@ -1070,6 +1073,8 @@ if uploaded_files:
     baseline_level = float(baseline_level_str)
 
     plot_time_warped = st.sidebar.checkbox("Plot Time Warped Curves", False)
+    show_legend = st.sidebar.checkbox("Show Legend", True)
+    show_peaks = st.sidebar.checkbox("Show Peaks (For Plotting At Single Frequency or Plotting Single Wave)", True)
 
     if not level:
         st.sidebar.subheader("Calibration Levels")
