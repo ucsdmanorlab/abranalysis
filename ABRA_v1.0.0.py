@@ -216,10 +216,7 @@ def plot_waves_single_tuple(freq, db, y_min, y_max):
     db_column = 'Level(dB)' if level else 'PostAtten(dB)'
 
     for idx, file_df in enumerate(selected_dfs):
-        if db_column == 'Level(dB)':
-            x_values, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db, 'blue')
-        else:
-            x_values, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db, 'blue')
+        x_values, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db, 'blue')
 
         if y_values is not None:
             if return_units == 'Nanovolts':
