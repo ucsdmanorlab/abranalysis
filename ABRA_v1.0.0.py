@@ -61,8 +61,8 @@ def interpolate_and_smooth(final, target_length=244):
         new_points = np.linspace(0, len(final), target_length + 2)
         interpolated_values = np.interp(new_points, np.arange(len(final)), final)
         final = np.array(interpolated_values[:target_length], dtype=float)
+        final = pd.Series(final)
     elif len(final) < target_length:
-        st.write(final)
         original_indices = np.arange(len(final))
         target_indices = np.linspace(0, len(final) - 1, target_length)
         cs = CubicSpline(original_indices, final)
@@ -89,16 +89,16 @@ def calculate_and_plot_wave(df, freq, db, color, threshold=None):
 
         x_values = np.linspace(0, len(y_values) / sampling_rate, len(y_values))
 
-        y_values = interpolate_and_smooth(final[:244])
+        #y_values = interpolate_and_smooth(final[:244])
         if units == 'Nanovolts':
             y_values /= 1000
 
         y_values *= multiply_y_factor
 
-        fpf = df[(df['Freq(Hz)'] == freq)].loc[:, '0':]
+        y_values_fpf = interpolate_and_smooth(y_values[:244])
 
         # Flatten the data to scale all values across the group
-        flattened_data = fpf.values.flatten().reshape(-1, 1)
+        flattened_data = y_values_fpf.values.flatten().reshape(-1, 1)
 
         # Step 1: Standardize the data
         scaler = StandardScaler()
@@ -106,20 +106,9 @@ def calculate_and_plot_wave(df, freq, db, color, threshold=None):
 
         # Step 2: Apply min-max scaling
         min_max_scaler = MinMaxScaler(feature_range=(0, 1))
-        scaled_data = min_max_scaler.fit_transform(standardized_data).reshape(fpf.shape)
+        scaled_data = min_max_scaler.fit_transform(standardized_data).reshape(y_values_fpf.shape)
 
-        # Reshape back to the original shape and update the group
-        fpf[fpf.columns] = scaled_data
-
-        finalfpf = fpf.loc[index, '0':].dropna()
-        finalfpf = pd.to_numeric(finalfpf, errors='coerce').dropna()
-
-        target = int(244 * (time_scale / 10))
-        
-        y_values_fpf = interpolate_and_smooth(finalfpf, target)  # Original y-values for plotting
-        sampling_rate = len(y_values) / time_scale
-
-        y_values_fpf = interpolate_and_smooth(finalfpf[:244])
+        y_values_fpf = interpolate_and_smooth(scaled_data[:244])
 
         highest_peaks, relevant_troughs = peak_finding(y_values_fpf)
 
@@ -173,11 +162,12 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
                 else:
                     fig.add_trace(go.Scatter(x=x_values, y=y_values, mode='lines', name=f'{calibration_levels[(file_df.name, freq)] - int(db)} dB', line=dict(color=glasbey_colors[i])))
 
-                # Mark the highest peaks with red markers
-                fig.add_trace(go.Scatter(x=x_values[highest_peaks], y=y_values[highest_peaks], mode='markers', marker=dict(color='red'), name='Peaks'))#, showlegend=False))
+                if show_peaks:
+                    # Mark the highest peaks with red markers
+                    fig.add_trace(go.Scatter(x=x_values[highest_peaks], y=y_values[highest_peaks], mode='markers', marker=dict(color='red'), name='Peaks', showlegend=show_legend))
 
-                # Mark the relevant troughs with blue markers
-                fig.add_trace(go.Scatter(x=x_values[relevant_troughs], y=y_values[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs'))#, showlegend=False))
+                    # Mark the relevant troughs with blue markers
+                    fig.add_trace(go.Scatter(x=x_values[relevant_troughs], y=y_values[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs', showlegend=show_legend))
 
                 if plot_time_warped:
                     original_waves.append(y_values.tolist())
@@ -231,12 +221,13 @@ def plot_waves_single_tuple(freq, db, y_min, y_max):
         if y_values is not None:
             if return_units == 'Nanovolts':
                 y_values *= 1000
-            fig.add_trace(go.Scatter(x=x_values, y=y_values, mode='lines', name=f'{selected_files[idx].split("/")[-1]}', showlegend=False))
-            # Mark the highest peaks with red markers
-            fig.add_trace(go.Scatter(x=x_values[highest_peaks], y=y_values[highest_peaks], mode='markers', marker=dict(color='red'), name='Peaks', showlegend=False))
+            fig.add_trace(go.Scatter(x=x_values, y=y_values, mode='lines', name=f'{selected_files[idx].split("/")[-1]}'))#, showlegend=False))
+            if show_peaks:
+                # Mark the highest peaks with red markers
+                fig.add_trace(go.Scatter(x=x_values[highest_peaks], y=y_values[highest_peaks], mode='markers', marker=dict(color='red'), name='Peaks'))#, showlegend=False))
 
-            # Mark the relevant troughs with blue markers
-            fig.add_trace(go.Scatter(x=x_values[relevant_troughs], y=y_values[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs', showlegend=False))
+                # Mark the relevant troughs with blue markers
+                fig.add_trace(go.Scatter(x=x_values[relevant_troughs], y=y_values[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs'))#, showlegend=False))
 
     if return_units == 'Nanovolts':
         y_units = 'Voltage (nV)'
@@ -244,13 +235,17 @@ def plot_waves_single_tuple(freq, db, y_min, y_max):
         y_units = 'Voltage (μV)'
 
     fig.update_layout(width=700, height=450)
-    fig.update_layout(xaxis_title='Time (ms)', yaxis_title=y_units, title=f'{selected_files[idx].split("/")[-1]}, Freq = {freq}, db = {db}')
+    if level:
+        fig.update_layout(xaxis_title='Time (ms)', yaxis_title=y_units, title=f'{selected_files[idx].split("/")[-1]}, Freq = {freq}, db = {db}')
+    else:
+        fig.update_layout(xaxis_title='Time (ms)', yaxis_title=y_units, title=f'{selected_files[idx].split("/")[-1]}, Freq = {freq}, db = {calibration_levels[(file_df.name, freq)] - int(db)}')
     fig.update_layout(annotations=annotations)
     fig.update_layout(yaxis_range=[y_min, y_max])
     fig.update_layout(font_family="Times New Roman",
                       font_color="black",
                       title_font_family="Times New Roman",
                       font=dict(size=18))
+    fig.update_layout(showlegend=show_legend)
 
     return fig
 
@@ -537,7 +532,7 @@ def plot_waves_stacked(freq):
                       font_color="black",
                       title_font_family="Times New Roman",
                       font=dict(size=18))
-        fig.update_layout(showlegend=False)
+        #fig.update_layout(showlegend=False)
 
         khz = file_df[(file_df['Freq(Hz)'] == freq)]
         if not khz.empty:
@@ -959,7 +954,8 @@ def plot_io_curve(df, freqs, db_levels, multiply_y_factor=1.0, units='Microvolts
 st.title("Wave Plotting App")
 st.sidebar.header("Upload File")
 uploaded_files = st.sidebar.file_uploader("Choose a file", type=["csv", "arf"], accept_multiple_files=True)
-is_rz_file = st.sidebar.radio("Select ARF File Type:", ("RZ", "RP"))
+#is_rz_file = st.sidebar.radio("Select ARF File Type:", ("RZ", "RP"))
+is_rz_file = "RZ"
 is_click = st.sidebar.radio("Click or Tone? (for .arf files)", ("Click", "Tone"))
 click = None
 if is_click == "Click":
@@ -1080,6 +1076,8 @@ if uploaded_files:
     baseline_level = float(baseline_level_str)
 
     plot_time_warped = st.sidebar.checkbox("Plot Time Warped Curves", False)
+    show_legend = st.sidebar.checkbox("Show Legend", True)
+    show_peaks = st.sidebar.checkbox("Show Peaks (For Plotting At Single Frequency or Plotting Single Wave)", True)
 
     if not level:
         st.sidebar.subheader("Calibration Levels")
@@ -1117,7 +1115,6 @@ if uploaded_files:
     if st.sidebar.button("Plot Single Wave (Frequency, dB)"):
         fig = plot_waves_single_tuple(freq, db, y_min, y_max)
         st.plotly_chart(fig)
-        fig.write_image("fig1.pdf")
         display_metrics_table_all_db(selected_dfs, [freq], [db], baseline_level)
         # Create an in-memory buffer
         buffer = io.BytesIO()
