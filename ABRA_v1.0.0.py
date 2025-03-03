@@ -34,25 +34,27 @@ warnings.filterwarnings('ignore')
 
 # Define the CNN model
 class CNN(nn.Module):
-    def __init__(self, dropout_prob=0.1):
+    def __init__(self, filter1, filter2, dropout1, dropout2, dropout_fc):
         super(CNN, self).__init__()
-        self.conv1 = nn.Conv1d(in_channels=1, out_channels=16, kernel_size=3, stride=1, padding=1)
+        self.conv1 = nn.Conv1d(in_channels=1, out_channels=filter1, kernel_size=3, stride=1, padding=1)
         self.pool = nn.MaxPool1d(kernel_size=2, stride=2, padding=0)
-        self.conv2 = nn.Conv1d(in_channels=16, out_channels=32, kernel_size=3, stride=1, padding=1)
-        self.fc1 = nn.Linear(32 * 61, 128)
+        self.conv2 = nn.Conv1d(in_channels=filter1, out_channels=filter2, kernel_size=3, stride=1, padding=1)
+        self.fc1 = nn.Linear(filter2 * 61, 128)
         self.fc2 = nn.Linear(128, 1)
-        self.dropout = nn.Dropout(dropout_prob)
-        self.batch_norm1 = nn.BatchNorm1d(16)
-        self.batch_norm2 = nn.BatchNorm1d(32)
-
+        self.dropout1 = nn.Dropout(dropout1)
+        self.dropout2 = nn.Dropout(dropout2)
+        self.dropout_fc = nn.Dropout(dropout_fc)
+        self.batch_norm1 = nn.BatchNorm1d(filter1)
+        self.batch_norm2 = nn.BatchNorm1d(filter2)
+    
     def forward(self, x):
         x = self.pool(nn.functional.relu(self.batch_norm1(self.conv1(x))))
-        x = self.dropout(x)
+        x = self.dropout1(x)
         x = self.pool(nn.functional.relu(self.batch_norm2(self.conv2(x))))
-        x = self.dropout(x)
-        x = x.view(-1, 32 * 61)
+        x = self.dropout2(x)
+        x = x.view(-1, self.fc1.in_features)
         x = nn.functional.relu(self.fc1(x))
-        x = self.dropout(x)
+        x = self.dropout_fc(x)
         x = self.fc2(x)
         return x
 
@@ -966,7 +968,14 @@ is_level = st.sidebar.radio("Select dB You Are Studying:", ("Level", "Attenuatio
 
 annotations = []
 
-peak_finding_model = CNN()
+filter1 = 128
+filter2 = 32
+dropout1 = 0.5
+dropout2 = 0.3
+dropout_fc = 0.1
+
+# Model initialization
+peak_finding_model = CNN(filter1, filter2, dropout1, dropout2, dropout_fc)
 model_loader = torch.load('./models/waveI_cnn.pth')
 peak_finding_model.load_state_dict(model_loader)
 peak_finding_model.eval()
