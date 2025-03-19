@@ -69,7 +69,7 @@ def interpolate_and_smooth(final, target_length=244):
         target_indices = np.linspace(0, len(final) - 1, target_length)
         cs = CubicSpline(original_indices, final)
         final = cs(target_indices)
-    return final
+    return pd.Series(final)
 
 def plot_wave(fig, x_values, y_values, color, name, marker_color=None):
     fig.add_trace(go.Scatter(x=x_values, y=y_values, mode='lines', name=name, line=dict(color=color)))
@@ -489,11 +489,10 @@ def plot_waves_stacked(freq):
                                                 name=f'Thresh: {int(db)} dB',
                                                 line=dict(color='black', width=5),
                                                 showlegend=True))
-                    
 
                     fig.add_annotation(
                         x=10,
-                        y=y_values[-1] + 0.5,
+                        y=y_values.iloc[-1] + 0.5,
                         xref="x",
                         yref="y",
                         text=f"{int(db)} dB",
