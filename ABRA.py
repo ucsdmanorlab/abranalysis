@@ -365,7 +365,7 @@ def display_metrics_table(df, freq, db, baseline_level):
             ).set_properties(**{'width': '100px'})
         return styled_metrics_table
 
-def display_metrics_table_all_db(selected_dfs, freqs, db_levels, baseline_level, time_scale):
+def display_metrics_table_all_db(selected_dfs, freqs, db_levels, time_scale):
     if level:
         db_column = 'Level(dB)'
     else:
@@ -720,7 +720,7 @@ def get_str(data):
         data = data[:ind]
     return data.decode('utf-8')
 
-def calculate_hearing_threshold(df, freq, baseline_level=100, multiply_y_factor=1):
+def calculate_hearing_threshold(df, freq, multiply_y_factor=1):
     db_column = 'Level(dB)' if level else 'PostAtten(dB)'
 
     thresholding_model = load_model('models/abr_thresholding.keras')
@@ -1076,8 +1076,8 @@ if uploaded_files:
     inputs = st.sidebar.expander("Input data properties", expanded=True)
     time_scale = inputs.number_input("Time scale of recording (ms)", value=10.0)
     units = inputs.selectbox("Units used in collection", options=['Microvolts', 'Nanovolts'], index=0)
-    baseline_level_str = inputs.text_input("Set Baseline Level", "0.0")
-    baseline_level = float(baseline_level_str)
+    # baseline_level_str = inputs.text_input("Set Baseline Level", "0.0")
+    # baseline_level = float(baseline_level_str)
 
     # Output settings:
     outputs = st.sidebar.expander("Output and plot settings", expanded=False)
@@ -1118,7 +1118,7 @@ if uploaded_files:
     if st.sidebar.button("Single wave (frequency, dB)"):
         fig = plot_waves_single_tuple(freq, db, y_min, y_max)
         st.plotly_chart(fig)
-        display_metrics_table_all_db(selected_dfs, [freq], [db], baseline_level, time_scale)
+        display_metrics_table_all_db(selected_dfs, [freq], [db], time_scale)
         # Create an in-memory buffer
         buffer = io.BytesIO()
 
@@ -1153,7 +1153,7 @@ if uploaded_files:
                 mime="application/pdf",
                 key=f'file{i}'
             )
-        display_metrics_table_all_db(selected_dfs, [freq], distinct_dbs, baseline_level, time_scale)
+        display_metrics_table_all_db(selected_dfs, [freq], distinct_dbs, time_scale)
 
     
     if freqbuttons2.button("Stacked"):
@@ -1228,7 +1228,7 @@ if uploaded_files:
         all_thresholds()
     
     if st.sidebar.button("Return All Peak Analyses"):
-        display_metrics_table_all_db(selected_dfs, distinct_freqs, distinct_dbs, baseline_level, time_scale)
+        display_metrics_table_all_db(selected_dfs, distinct_freqs, distinct_dbs, time_scale)
     
     #if st.sidebar.button("Plot Waves with Gaussian Smoothing"):
     #    fig_gauss = plotting_waves_gauss(dfs, freq, db)
