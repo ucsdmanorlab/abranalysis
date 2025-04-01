@@ -1012,17 +1012,17 @@ if uploaded_files:
     calibration_levels = {}
 
     
-    st.sidebar.write("Select files to analyze:")
+    # st.sidebar.write("Select files to analyze:")
     for idx, file in enumerate(uploaded_files):
         # Use tempfile
         temp_file_path = os.path.join(tempfile.gettempdir(), file.name)
         with open(temp_file_path, 'wb') as temp_file:
             temp_file.write(file.read())
         #st.sidebar.markdown(f"**File Name:** {file.name}")
-        selected = st.sidebar.checkbox(f"{file.name}", key=f"file_{idx}", value=True)
+        # selected = st.sidebar.checkbox(f"{file.name}", key=f"file_{idx}", value=True)
         
-        if selected:
-            selected_files.append(temp_file_path)
+        # if selected:
+        selected_files.append(temp_file_path)
 
         if file.name.endswith(".arf"):
         # Read ARF file
@@ -1079,13 +1079,6 @@ if uploaded_files:
     # Get distinct frequency and dB level values across all files
     distinct_freqs = sorted(pd.concat([df['Freq(Hz)'] for df in dfs]).unique())
     distinct_dbs = sorted(pd.concat([df['Level(dB)'] if level else df['PostAtten(dB)'] for df in dfs]).unique())
-
-    # Inputs:
-    # inputs = st.sidebar.expander("Input data properties", expanded=True)
-    # time_scale = inputs.number_input("Time scale of recording (ms)", value=10.0)
-    # units = inputs.selectbox("Units used in collection", options=['Microvolts', 'Nanovolts'], index=0)
-    # baseline_level_str = inputs.text_input("Set Baseline Level", "0.0")
-    # baseline_level = float(baseline_level_str)
 
     # Output settings:
     outputs = st.sidebar.expander("Output and plot settings", expanded=False)
