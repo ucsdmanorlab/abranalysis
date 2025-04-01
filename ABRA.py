@@ -1,32 +1,34 @@
-import streamlit as st
-import fdasrsf as fs
-import plotly.figure_factory as ff
-import pandas as pd
-import numpy as np
-from scipy.signal import find_peaks
-import os
-import tempfile
-from scipy.interpolate import CubicSpline
-import plotly.graph_objects as go
-import struct
 import datetime
+import io
+#import keras
+import os
+import struct
+import tempfile
+import torch
+import torch.nn as nn
+#import torch.optim as optim
+import colorcet as cc
+import fdasrsf as fs
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+#import plotly.figure_factory as ff
+import plotly.graph_objects as go
 from skfda import FDataGrid
 from skfda.preprocessing.dim_reduction import FPCA
 from sklearn.cluster import DBSCAN
+import streamlit as st
+
 from kneed import KneeLocator
+from scipy.signal import find_peaks
+from scipy.interpolate import CubicSpline
+from scipy.ndimage import gaussian_filter1d
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
-from scipy.ndimage import gaussian_filter1d
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import keras
 from tensorflow.keras.models import load_model
-import matplotlib.pyplot as plt
-from matplotlib import cm
-import colorcet as cc
-import io
-from numpy import AxisError
+#from matplotlib import cm
+#from numpy import AxisError
+
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -204,7 +206,8 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
 
         fig.update_layout(title=f'{selected_files[idx].split("/")[-1]} - Frequency: {freq} Hz', xaxis_title='Time (ms)', yaxis_title=y_units)
         fig.update_layout(annotations=annotations)
-        fig.update_layout(yaxis_range=[y_min, y_max])
+        if not auto_y:
+            fig.update_layout(yaxis_range=[y_min, y_max])
         fig.update_layout(width=700, height=450)
         fig.update_layout(font_family="Times New Roman",
                       font_color="black",
@@ -243,7 +246,8 @@ def plot_waves_single_tuple(freq, db, y_min, y_max):
     else:
         fig.update_layout(xaxis_title='Time (ms)', yaxis_title=y_units, title=f'{selected_files[idx].split("/")[-1]}, Freq = {freq}, db = {calibration_levels[(file_df.name, freq)] - int(db)}')
     fig.update_layout(annotations=annotations)
-    fig.update_layout(yaxis_range=[y_min, y_max])
+    if not auto_y:
+        fig.update_layout(yaxis_range=[y_min, y_max])
     fig.update_layout(font_family="Times New Roman",
                       font_color="black",
                       title_font_family="Times New Roman",
@@ -1090,9 +1094,9 @@ if uploaded_files:
     else:
         ymin = -5.0
         ymax = 5.0
-
-    y_min = outputs.number_input("Y-axis Minimum", value=ymin)
-    y_max = outputs.number_input("Y-axis Maximum", value=ymax)
+    auto_y = outputs.toggle("Auto Y-axis scaling", value=False)
+    y_min = outputs.number_input("Y-axis minimum", value=ymin, disabled=auto_y)
+    y_max = outputs.number_input("Y-axis maximum", value=ymax, disabled=auto_y)
     plot_time_warped = outputs.checkbox("Plot time warped curves", False)
     show_legend = outputs.checkbox("Show legend", True)
     show_peaks = outputs.checkbox("Show peaks (single wave and single frequency plots)", True)
@@ -1102,22 +1106,22 @@ if uploaded_files:
     vert_space = advanced_settings.number_input("Vertical space (for stacked curves)", value=25.0, min_value=0.0, step=1.0)
 
     # Frequency dropdown options
-    freq = st.sidebar.selectbox("Select Frequency (Hz)", options=distinct_freqs, index=0)
+    freq = st.sidebar.selectbox("Select frequency (Hz)", options=distinct_freqs, index=0)
 
     # dB Level dropdown options
     db = st.sidebar.selectbox(f'Select dB', options=distinct_dbs, index=0)
 
     
     if not level:
-        st.sidebar.subheader("Calibration Levels")
+        st.sidebar.subheader("Calibration levels")
         for file in selected_files:
             for hz in distinct_freqs:
                 key = (os.path.basename(file), hz)
-                calibration_levels[key] = st.sidebar.number_input(f"Calibration Level for {os.path.basename(file)} at {hz} Hz", value=0.0)
+                calibration_levels[key] = st.sidebar.number_input(f"Calibration level for {os.path.basename(file)} at {hz} Hz", value=0.0)
 
     # Create a plotly figure
     fig = go.Figure()
-    st.sidebar.write("**Plot functions:**")
+    st.sidebar.header("Plot functions:")
 
     if st.sidebar.button("Single wave (frequency, dB)"):
         fig = plot_waves_single_tuple(freq, db, y_min, y_max)
@@ -1204,7 +1208,7 @@ if uploaded_files:
             )
 
     #io_all_freqs = st.sidebar.toggle("All frequencies", value=False)
-    if st.sidebar.button("I/O Curve"):
+    if st.sidebar.button("I/O curve"):
         # if io_all_freqs:
         #     fig_list = plot_io_curve(df, distinct_freqs, distinct_dbs)
         # else:
@@ -1227,11 +1231,11 @@ if uploaded_files:
                 key=f'file{i}'
             )
 
-    st.sidebar.write("**Data outputs:**")
-    if st.sidebar.button("Return All Thresholds"):
+    st.sidebar.header("Data outputs:")
+    if st.sidebar.button("Return all thresholds"):
         all_thresholds()
     
-    if st.sidebar.button("Return All Peak Analyses"):
+    if st.sidebar.button("Return all peak analyses"):
         display_metrics_table_all_db(selected_dfs, distinct_freqs, distinct_dbs, time_scale)
     
     #if st.sidebar.button("Plot Waves with Gaussian Smoothing"):
