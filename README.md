@@ -1,9 +1,38 @@
 # Auditory Brainstem Response Analyzer (ABRA)
 ABRA is a web application created using Streamlit which allows users to batch-upload and analyze ABR data.
-It can either be run on the [web](https://ucsdabranalysis.streamlit.app)
-OR
-locally by going to working directory and running `streamlit run wave_plot_app.py` in your terminal after using `pip install` for the packages in the [requirements.txt file](https://github.com/abhierra2/ucsdpracticum/blob/main/requirements.txt).
-<br>
+
+It can either be run on the [web](https://abra.ucsd.edu) OR locally (instructions below).
+
+## Local installation:
+Quick install instructions are below. For more detail see the full [ABRA Instructions](https://github.com/ucsdmanorlab/abranalysis/blob/main/ABRA_Instructions.pdf).
+
+(Recommended) Install in a separate conda environment:
+1. If conda is not installed, first install [miniconda](https://www.anaconda.com/docs/getting-started/miniconda/install)
+
+2. Open “Anaconda Prompt (miniconda3)” to run miniconda after install
+
+3. Clone this github repo and move to the working directory:
+
+    git clone git@github.com:ucsdmanorlab/abranalysis.git
+    cd abranalysis 
+
+4. Create a conda environment and install requirements:
+
+    conda create -y -n abra python=3.12
+    conda activate abra
+    pip install -r requirements.txt
+
+5. Launch the streamlit app:
+
+    streamlit run ABRA.py
+
+On future uses, you only need to open the Anaconda Prompt, then run the following to activate the ABRA environment, move to the ABRA installation directory, and launch the streamlit app. 
+
+    conda activate abra
+    cd abranalysis
+    streamlit run ABRA.py
+
+## Usage: 
 First upload your file. If you're loading an Tucker Davis .arf file please select whether you got the file from BioSigRP or BioSigRZ. If you're uploading a .csv file make sure that the title for the decibel column is `Level(dB)`, the title for the frequency column is `Freq(Hz)`, and the vector of data points ends each corresponding row.
 <br></br>
 Here is an example of what it should look like:
