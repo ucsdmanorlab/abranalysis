@@ -980,13 +980,15 @@ st.sidebar.header("Upload File")
 uploaded_files = st.sidebar.file_uploader("Choose a file", type=["csv", "arf"], accept_multiple_files=True)
 #is_rz_file = st.sidebar.radio("Select ARF File Type:", ("RZ", "RP"))
 is_rz_file = "RZ"
-is_click = st.sidebar.radio("Tone or click? (for .arf files)", ("Tone", "Click"), horizontal=True)
-click = None
-if is_click == "Click":
-    click = True
-else:
-    click = False
-is_atten = st.sidebar.toggle("dB saved as attenuation", value=False)
+# Inputs:
+inputs = st.sidebar.expander("Input data properties", expanded=True)
+time_scale = inputs.number_input("Time scale of recording (ms)", value=10.0)
+units = inputs.selectbox("Units used in collection", options=['Microvolts', 'Nanovolts'], index=0)
+# baseline_level_str = inputs.text_input("Set Baseline Level", "0.0")
+# baseline_level = float(baseline_level_str)
+is_click = inputs.radio("Tone or click? (for .arf files)", ("Tone", "Click"), horizontal=True)
+click = True if is_click == "Click" else False
+is_atten = inputs.toggle("dB saved as attenuation", value=False)
 
 
 annotations = []
@@ -1079,9 +1081,9 @@ if uploaded_files:
     distinct_dbs = sorted(pd.concat([df['Level(dB)'] if level else df['PostAtten(dB)'] for df in dfs]).unique())
 
     # Inputs:
-    inputs = st.sidebar.expander("Input data properties", expanded=True)
-    time_scale = inputs.number_input("Time scale of recording (ms)", value=10.0)
-    units = inputs.selectbox("Units used in collection", options=['Microvolts', 'Nanovolts'], index=0)
+    # inputs = st.sidebar.expander("Input data properties", expanded=True)
+    # time_scale = inputs.number_input("Time scale of recording (ms)", value=10.0)
+    # units = inputs.selectbox("Units used in collection", options=['Microvolts', 'Nanovolts'], index=0)
     # baseline_level_str = inputs.text_input("Set Baseline Level", "0.0")
     # baseline_level = float(baseline_level_str)
 
