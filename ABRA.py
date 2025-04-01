@@ -395,7 +395,9 @@ def display_metrics_table_all_db(selected_dfs, freqs, db_levels, time_scale):
 
             for db in db_levels:
                 _, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db)
-                    
+                
+                if y_values is None:
+                    continue
                 if return_units == 'Nanovolts':
                     y_values *= 1000
 
@@ -809,8 +811,8 @@ def peak_finding(wave):
     waveform_torch = torch.tensor(waveform, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
     
     # Get prediction from model
-    outputs = peak_finding_model(waveform_torch)
-    prediction = int(round(outputs.detach().numpy()[0][0], 0))
+    pk_outputs = peak_finding_model(waveform_torch)
+    prediction = int(round(pk_outputs.detach().numpy()[0][0], 0))
 
     # Apply Gaussian smoothing
     smoothed_waveform = gaussian_filter1d(wave, sigma=1.0)
@@ -1081,9 +1083,7 @@ if uploaded_files:
 
     # Output settings:
     outputs = st.sidebar.expander("Output and plot settings", expanded=False)
-    multiply_y_factor = outputs.number_input("Multiply Y values by factor", value=1.0)
     return_units = outputs.selectbox("Units for plots and outputs", options=['Microvolts', 'Nanovolts'], index=0)
-    vert_space = outputs.number_input("Vertical space (for stacked curves)", value=25.0, min_value=0.0, step=1.0)
     if return_units == 'Nanovolts':
         ymin = -5000.0
         ymax = 5000.0
@@ -1096,6 +1096,10 @@ if uploaded_files:
     plot_time_warped = outputs.checkbox("Plot time warped curves", False)
     show_legend = outputs.checkbox("Show legend", True)
     show_peaks = outputs.checkbox("Show peaks (single wave and single frequency plots)", True)
+
+    advanced_settings = st.sidebar.expander("Advanced settings", expanded=False)
+    multiply_y_factor = advanced_settings.number_input("Multiply Y values by factor", value=1.0)
+    vert_space = advanced_settings.number_input("Vertical space (for stacked curves)", value=25.0, min_value=0.0, step=1.0)
 
     # Frequency dropdown options
     freq = st.sidebar.selectbox("Select Frequency (Hz)", options=distinct_freqs, index=0)
