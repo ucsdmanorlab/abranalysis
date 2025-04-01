@@ -14,7 +14,8 @@ Quick install instructions are below. For more detail see the full [ABRA Instruc
 3. Clone this github repo and move to the working directory:
 ```
     git clone git@github.com:ucsdmanorlab/abranalysis.git
-    cd abranalysis 
+    cd abranalysis
+    git checkout testing/peaks
 ```
 4. Create a conda environment and install requirements:
 ```
