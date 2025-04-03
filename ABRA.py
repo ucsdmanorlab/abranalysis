@@ -1019,10 +1019,10 @@ if uploaded_files:
         with open(temp_file_path, 'wb') as temp_file:
             temp_file.write(file.read())
         #st.sidebar.markdown(f"**File Name:** {file.name}")
-        # selected = st.sidebar.checkbox(f"{file.name}", key=f"file_{idx}", value=True)
+        selected = st.sidebar.checkbox(f"{file.name}", key=f"file_{idx}", value=True)
         
-        # if selected:
-        selected_files.append(temp_file_path)
+        if selected:
+            selected_files.append(temp_file_path)
 
         if file.name.endswith(".arf"):
         # Read ARF file
