@@ -209,9 +209,9 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
         if not auto_y:
             fig.update_layout(yaxis_range=[y_min, y_max])
         fig.update_layout(width=700, height=450)
-        fig.update_layout(font_family="Times New Roman",
+        fig.update_layout(#font_family="Times New Roman",
                       font_color="black",
-                      title_font_family="Times New Roman",
+                      #title_font_family="Times New Roman",
                       font=dict(size=18))
 
         fig_list.append(fig)
@@ -248,9 +248,9 @@ def plot_waves_single_tuple(freq, db, y_min, y_max):
     fig.update_layout(annotations=annotations)
     if not auto_y:
         fig.update_layout(yaxis_range=[y_min, y_max])
-    fig.update_layout(font_family="Times New Roman",
+    fig.update_layout(#font_family="Times New Roman",
                       font_color="black",
-                      title_font_family="Times New Roman",
+                      #title_font_family="Times New Roman",
                       font=dict(size=18))
     fig.update_layout(showlegend=show_legend)
 
@@ -319,9 +319,9 @@ def plot_3d_surface(df, freq, y_min, y_max):
 
         fig.update_layout(scene_camera=camera)
         #fig.update_layout(showlegend=False)
-        fig.update_layout(font_family="Times New Roman",
+        fig.update_layout(#font_family="Times New Roman",
                       font_color="black",
-                      title_font_family="Times New Roman",
+                      #title_font_family="Times New Roman",
                       font=dict(size=14))
 
         fig_list.append(fig)
@@ -516,7 +516,7 @@ def plot_waves_stacked(freq):
 
                     fig.add_annotation(
                         x=10,
-                        y=y_values.iloc[-1] + 0.5,
+                        y=y_values.iloc[-1] + vert_space/num_dbs/2,
                         xref="x",
                         yref="y",
                         text=f"{int(db)} dB",
@@ -552,10 +552,10 @@ def plot_waves_stacked(freq):
                           width=400,
                           height=700,
                           yaxis=dict(showticklabels=False, showgrid=False, zeroline=False),
-                          xaxis=dict(showgrid=False, zeroline=False))
-        fig.update_layout(font_family="Times New Roman",
+                          xaxis=dict(showgrid=True, zeroline=False))
+        fig.update_layout(#font_family="Times New Roman",
                       font_color="black",
-                      title_font_family="Times New Roman",
+                      #title_font_family="Times New Roman",
                       font=dict(size=18))
         #fig.update_layout(showlegend=False)
 
@@ -966,9 +966,9 @@ def plot_io_curve(df, freqs, db_levels, multiply_y_factor=1.0, units='Microvolts
                 yaxis=dict(range=[0, max(amplitudes.values()) + 0.1 * abs(max(amplitudes.values()))]),
                 template='plotly_white'
             )
-            fig.update_layout(font_family="Times New Roman",
+            fig.update_layout(#font_family="Times New Roman",
                             font_color="black",
-                            title_font_family="Times New Roman",
+                            #title_font_family="Times New Roman",
                             font=dict(size=24))
 
             fig_list.append(fig)
@@ -1080,6 +1080,14 @@ if uploaded_files:
     distinct_freqs = sorted(pd.concat([df['Freq(Hz)'] for df in dfs]).unique())
     distinct_dbs = sorted(pd.concat([df['Level(dB)'] if level else df['PostAtten(dB)'] for df in dfs]).unique())
 
+    if not level:
+        cal_levels = st.sidebar.expander("Calibration dB levels", expanded=True)
+        for file in selected_files: # TO-DO: ask if this needs to be set per file or should be generalized across all files??
+            for hz in distinct_freqs:
+                key = (os.path.basename(file), hz)
+                calibration_levels[key] = cal_levels.number_input(f"Calibration dB for {os.path.basename(file)} at {hz} Hz", 
+                                                                  value=100.0, step=5.0, format="%0.1f",)
+
     # Output settings:
     outputs = st.sidebar.expander("Output and plot settings", expanded=False)
     return_units = outputs.selectbox("Units for plots and outputs", options=['Microvolts', 'Nanovolts'], index=0)
@@ -1103,17 +1111,9 @@ if uploaded_files:
     # Frequency dropdown options
     freq = st.sidebar.selectbox("Select frequency (Hz)", options=distinct_freqs, index=0)
 
-    # dB Level dropdown options
-    db = st.sidebar.selectbox(f'Select dB', options=distinct_dbs, index=0)
-
+    # dB Level dropdown options, default to last (highest) dB)
+    db = st.sidebar.selectbox(f'Select dB', options=distinct_dbs, index=len(distinct_dbs)-1 if len(distinct_dbs) > 0 else 0)
     
-    if not level:
-        st.sidebar.subheader("Calibration levels")
-        for file in selected_files:
-            for hz in distinct_freqs:
-                key = (os.path.basename(file), hz)
-                calibration_levels[key] = st.sidebar.number_input(f"Calibration level for {os.path.basename(file)} at {hz} Hz", value=0.0)
-
     # Create a plotly figure
     fig = go.Figure()
     st.sidebar.header("Plot functions:")
