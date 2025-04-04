@@ -1,5 +1,5 @@
 # Auditory Brainstem Response Analyzer (ABRA)
-ABRA is a web application created using Streamlit which allows users to batch-upload and analyze ABR data.
+ABRA is a web application created using Streamlit which allows users to batch-upload and analyze ABR data. Read the preprint [here](https://www.biorxiv.org/content/10.1101/2024.06.20.599815v2)!
 
 It can either be run on the [web](https://abra.ucsd.edu) OR locally (instructions below).
 
