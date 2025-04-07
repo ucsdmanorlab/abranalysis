@@ -99,6 +99,7 @@ def calculate_and_plot_wave(df, freq, db):
 
         y_values *= multiply_y_factor
 
+        # y_values for peak finding:
         y_values_fpf = interpolate_and_smooth(y_values[:244])
 
         # Flatten the data to scale all values across the group
@@ -747,7 +748,11 @@ def calculate_hearing_threshold(df, freq, multiply_y_factor=1):
             final = pd.to_numeric(final, errors='coerce')
             final = np.array(final, dtype=np.float64)
             target = int(244 * (time_scale / 10))
-            y_values = interpolate_and_smooth(final, target)
+            y_values = interpolate_and_smooth(final, target) # this is unused?
+            # should be???: 
+            # take_values = len(final) * (10 / time_scale) 
+            # final = interpolate_and_smooth(final[:int(take_values)], 244)
+
             final = interpolate_and_smooth(final[:244])
             final *= multiply_y_factor
 
@@ -976,12 +981,13 @@ def plot_io_curve(df, freqs, db_levels, multiply_y_factor=1.0, units='Microvolts
 
 # Streamlit UI
 st.title("ABRA")
-st.sidebar.header("Upload File")
-uploaded_files = st.sidebar.file_uploader("Choose a file", type=["csv", "arf"], accept_multiple_files=True)
+tab1, tab2 = st.sidebar.tabs(["Data", "Plotting and Analysis"])
+tab1.header("Upload File")
+uploaded_files = tab1.file_uploader("Choose a file", type=["csv", "arf"], accept_multiple_files=True)
 #is_rz_file = st.sidebar.radio("Select ARF File Type:", ("RZ", "RP"))
 is_rz_file = "RZ"
 # Inputs:
-inputs = st.sidebar.expander("Input data properties", expanded=True)
+inputs = tab1.expander("Input data properties", expanded=True)
 time_scale = inputs.number_input("Time scale of recording (ms)", value=10.0)
 units = inputs.selectbox("Units used in collection", options=['Microvolts', 'Nanovolts'], index=0)
 # baseline_level_str = inputs.text_input("Set Baseline Level", "0.0")
@@ -1019,7 +1025,7 @@ if uploaded_files:
         with open(temp_file_path, 'wb') as temp_file:
             temp_file.write(file.read())
         #st.sidebar.markdown(f"**File Name:** {file.name}")
-        selected = st.sidebar.checkbox(f"{file.name}", key=f"file_{idx}", value=True)
+        selected = tab2.checkbox(f"{file.name}", key=f"file_{idx}", value=True)
         
         if selected:
             selected_files.append(temp_file_path)
@@ -1081,7 +1087,7 @@ if uploaded_files:
     distinct_dbs = sorted(pd.concat([df['Level(dB)'] if level else df['PostAtten(dB)'] for df in dfs]).unique())
 
     if not level:
-        cal_levels = st.sidebar.expander("Calibration dB levels", expanded=True)
+        cal_levels = tab1.expander("Calibration dB levels", expanded=True)
         for file in selected_files: # TO-DO: ask if this needs to be set per file or should be generalized across all files??
             for hz in distinct_freqs:
                 key = (os.path.basename(file), hz)
@@ -1089,7 +1095,7 @@ if uploaded_files:
                                                                   value=100.0, step=5.0, format="%0.1f",)
 
     # Output settings:
-    outputs = st.sidebar.expander("Output and plot settings", expanded=False)
+    outputs = tab2.expander("Output and plot settings", expanded=False)
     return_units = outputs.selectbox("Units for plots and outputs", options=['Microvolts', 'Nanovolts'], index=0)
     if return_units == 'Nanovolts':
         ymin = -5000.0
@@ -1104,21 +1110,21 @@ if uploaded_files:
     show_legend = outputs.checkbox("Show legend", True)
     show_peaks = outputs.checkbox("Show peaks (single wave and single frequency plots)", True)
 
-    advanced_settings = st.sidebar.expander("Advanced settings", expanded=False)
+    advanced_settings = tab2.expander("Advanced settings", expanded=False)
     multiply_y_factor = advanced_settings.number_input("Multiply Y values by factor", value=1.0)
     vert_space = advanced_settings.number_input("Vertical space (for stacked curves)", value=25.0, min_value=0.0, step=1.0)
 
     # Frequency dropdown options
-    freq = st.sidebar.selectbox("Select frequency (Hz)", options=distinct_freqs, index=0)
+    freq = tab2.selectbox("Select frequency (Hz)", options=distinct_freqs, index=0)
 
     # dB Level dropdown options, default to last (highest) dB)
-    db = st.sidebar.selectbox(f'Select dB', options=distinct_dbs, index=len(distinct_dbs)-1 if len(distinct_dbs) > 0 else 0)
+    db = tab2.selectbox(f'Select dB', options=distinct_dbs, index=len(distinct_dbs)-1 if len(distinct_dbs) > 0 else 0)
     
     # Create a plotly figure
     fig = go.Figure()
-    st.sidebar.header("Plot functions:")
+    tab2.header("Plot functions:")
 
-    if st.sidebar.button("Single wave (frequency, dB)"):
+    if tab2.button("Single wave (frequency, dB)"):
         fig = plot_waves_single_tuple(freq, db, y_min, y_max)
         st.plotly_chart(fig)
         display_metrics_table_all_db(selected_dfs, [freq], [db], time_scale)
@@ -1136,7 +1142,7 @@ if uploaded_files:
             mime="application/pdf",
         )
     
-    freqbuttons1, freqbuttons2 = st.sidebar.columns(2)
+    freqbuttons1, freqbuttons2 = tab2.columns(2)
     if freqbuttons1.button("Single frequency"):
         fig_list = plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=plot_time_warped)
         
@@ -1183,7 +1189,7 @@ if uploaded_files:
     #    fig.update_layout(yaxis_range=[y_min, y_max])
     #    st.plotly_chart(fig)
 
-    if st.sidebar.button("3D surface"):
+    if tab2.button("3D surface"):
         fig_list = plot_3d_surface(df, freq, y_min, y_max)
         for i in range(len(fig_list)):
             st.plotly_chart(fig_list[i])
@@ -1203,7 +1209,7 @@ if uploaded_files:
             )
 
     #io_all_freqs = st.sidebar.toggle("All frequencies", value=False)
-    if st.sidebar.button("I/O curve"):
+    if tab2.button("I/O curve"):
         # if io_all_freqs:
         #     fig_list = plot_io_curve(df, distinct_freqs, distinct_dbs)
         # else:
@@ -1226,11 +1232,11 @@ if uploaded_files:
                 key=f'file{i}'
             )
 
-    st.sidebar.header("Data outputs:")
-    if st.sidebar.button("Return all thresholds"):
+    tab2.header("Data outputs:")
+    if tab2.button("Return all thresholds"):
         all_thresholds()
     
-    if st.sidebar.button("Return all peak analyses"):
+    if tab2.button("Return all peak analyses"):
         display_metrics_table_all_db(selected_dfs, distinct_freqs, distinct_dbs, time_scale)
     
     #if st.sidebar.button("Plot Waves with Gaussian Smoothing"):
@@ -1238,3 +1244,6 @@ if uploaded_files:
     #    st.plotly_chart(fig_gauss)
     
     #st.markdown(get_download_link(fig), unsafe_allow_html=True)
+
+else:
+    tab2.write("Please upload files to analyze in the 'Data' tab.")
