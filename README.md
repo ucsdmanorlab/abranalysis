@@ -11,17 +11,25 @@ Quick install instructions are below. For more detail see the full [ABRA Instruc
 
 2. Open “Anaconda Prompt (miniconda3)” to run miniconda after install
 
+(2b.) Check git is installed by typing `git -h`. If you get a message that git is not installed, run:
+```
+conda install anaconda::git
+```
+
 3. Clone this github repo and move to the working directory:
 ```
-    git clone git@github.com:ucsdmanorlab/abranalysis.git
-    cd abranalysis
-    git checkout testing/peaks
+git clone https://github.com/ucsdmanorlab/abranalysis.git
+```
+Type yes if prompted, then:
+```
+cd abranalysis
+git checkout testing/peaks
 ```
 4. Create a conda environment and install requirements:
 ```
-    conda create -y -n abra python=3.12
-    conda activate abra
-    pip install -r requirements.txt
+conda create -y -n abra python=3.12
+conda activate abra
+pip install -r requirements.txt
 ```
 5. Launch the streamlit app:
 ```

@@ -214,7 +214,7 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
                       font_color="black",
                       #title_font_family="Times New Roman",
                       font=dict(size=18))
-
+        fig.update_layout(showlegend=show_legend)
         fig_list.append(fig)
     return fig_list
 
@@ -324,7 +324,7 @@ def plot_3d_surface(df, freq, y_min, y_max):
                       font_color="black",
                       #title_font_family="Times New Roman",
                       font=dict(size=14))
-
+        fig.update_layout(showlegend=show_legend)
         fig_list.append(fig)
     return fig_list
 
@@ -440,7 +440,7 @@ def display_metrics_table_all_db(selected_dfs, freqs, db_levels, time_scale):
     metrics_table = pd.DataFrame(metrics_data)
     st.dataframe(metrics_table, hide_index=True, use_container_width=True)
 
-def plot_waves_stacked(freq):
+def plot_waves_stacked(freq, labels=None):
     if len(selected_dfs) == 0:
         st.write("No files selected.")
         return
@@ -473,6 +473,7 @@ def plot_waves_stacked(freq):
 
         for i, db in enumerate(db_levels):
             try:
+                is_thresh = False
                 if db_column == 'Level(dB)':
                     khz = file_df[(file_df['Freq(Hz)'] == freq) & (file_df[db_column] == db)]
                 else:
@@ -508,21 +509,28 @@ def plot_waves_stacked(freq):
                                             line=dict(color=color_scale)))
 
                     if (db_column == 'Level(dB)' and db == threshold) or (db_column == 'PostAtten(dB)' and db == threshold):
+                        is_thresh=True
                         fig.add_trace(go.Scatter(x=np.linspace(0, time_scale, len(y_values)),
                                                 y=y_values,
                                                 mode='lines',
                                                 name=f'Thresh: {int(db)} dB',
                                                 line=dict(color='black', width=5),
-                                                showlegend=True))
-
+                                                #showlegend=True
+                                                ))
+                    if labels=="left":
+                        x_pos = 0; y_pos = db_offsets[db]
+                    elif labels=="right":
+                        x_pos = 11; y_pos = db_offsets[db]
+                    else:
+                        x_pos = 10; y_pos = db_offsets[db] + vert_space/num_dbs/3 #y_values.iloc[-1]
                     fig.add_annotation(
-                        x=10,
-                        y=y_values.iloc[-1] + vert_space/num_dbs/2,
+                        x=x_pos,
+                        y=y_pos,
                         xref="x",
                         yref="y",
-                        text=f"{int(db)} dB",
+                        text=f"<b>{int(db)} dB</b>" if is_thresh else f"{int(db)} dB",
                         showarrow=False,
-                        font=dict(size=18, color=color_scale),
+                        font=dict(size=18, color='black' if is_thresh else color_scale),
                         xanchor="right"
                     )
             except Exception as e:
@@ -558,7 +566,7 @@ def plot_waves_stacked(freq):
                       font_color="black",
                       #title_font_family="Times New Roman",
                       font=dict(size=18))
-        #fig.update_layout(showlegend=False)
+        fig.update_layout(showlegend=show_legend)
 
         khz = file_df[(file_df['Freq(Hz)'] == freq)]
         if not khz.empty:
@@ -982,8 +990,8 @@ def plot_io_curve(df, freqs, db_levels, multiply_y_factor=1.0, units='Microvolts
 # Streamlit UI
 st.title("ABRA")
 tab1, tab2 = st.sidebar.tabs(["Data", "Plotting and Analysis"])
-tab1.header("Upload File")
-uploaded_files = tab1.file_uploader("Choose a file", type=["csv", "arf"], accept_multiple_files=True)
+#tab1.header("Upload File")
+uploaded_files = tab1.file_uploader("**Upload files to analyze:**", type=["csv", "arf"], accept_multiple_files=True)
 #is_rz_file = st.sidebar.radio("Select ARF File Type:", ("RZ", "RP"))
 is_rz_file = "RZ"
 # Inputs:
@@ -1088,7 +1096,8 @@ if uploaded_files:
 
     if not level:
         cal_levels = tab1.expander("Calibration dB levels", expanded=True)
-        for file in selected_files: # TO-DO: ask if this needs to be set per file or should be generalized across all files??
+        # TODO: ask if this needs to be set per file or should be generalized across all files??
+        for file in selected_files: 
             for hz in distinct_freqs:
                 key = (os.path.basename(file), hz)
                 calibration_levels[key] = cal_levels.number_input(f"Calibration dB for {os.path.basename(file)} at {hz} Hz", 
@@ -1247,3 +1256,5 @@ if uploaded_files:
 
 else:
     tab2.write("Please upload files to analyze in the 'Data' tab.")
+
+st.sidebar.caption("[preprint](https://www.biorxiv.org/content/10.1101/2024.06.20.599815v2) | [github](https://github.com/ucsdmanorlab/abranalysis)")
