@@ -1159,7 +1159,7 @@ if uploaded_files:
         st.download_button(
             label="Download plot as PDF",
             data=buffer,
-            file_name=selected_files[i].split("/")[-1].split('.')[0] + "_f" + str(int(freq))+ "_dB"+str(int(db))+".pdf",
+            file_name=(selected_files[0].split("/")[-1].split('.')[0] + "_f" + str(int(freq))+ "_dB"+str(int(db))+".pdf") if len(selected_files)==1 else "all_files_f" + str(int(freq))+ "_dB"+str(int(db))+".pdf",
             mime="application/pdf",
         )
     
