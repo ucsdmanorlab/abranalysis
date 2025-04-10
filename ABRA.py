@@ -32,6 +32,8 @@ from tensorflow.keras.models import load_model
 import warnings
 warnings.filterwarnings('ignore')
 
+# TODO: use session states so plots don't disappear when downloading files
+
 # Co-authored by: Abhijeeth Erra and Jeffrey Chen
 
 # Define the CNN model
@@ -440,7 +442,7 @@ def display_metrics_table_all_db(selected_dfs, freqs, db_levels, time_scale):
     metrics_table = pd.DataFrame(metrics_data)
     st.dataframe(metrics_table, hide_index=True, use_container_width=True)
 
-def plot_waves_stacked(freq, labels=None):
+def plot_waves_stacked(freq, stacked_labels=None):
     if len(selected_dfs) == 0:
         st.write("No files selected.")
         return
@@ -517,12 +519,15 @@ def plot_waves_stacked(freq, labels=None):
                                                 line=dict(color='black', width=5),
                                                 #showlegend=True
                                                 ))
-                    if labels=="left":
+                    if stacked_labels=="left outside":
                         x_pos = 0; y_pos = db_offsets[db]
-                    elif labels=="right":
+                    elif stacked_labels=="right outside":
                         x_pos = 11; y_pos = db_offsets[db]
-                    else:
+                    elif stacked_labels=="right inside":
                         x_pos = 10; y_pos = db_offsets[db] + vert_space/num_dbs/3 #y_values.iloc[-1]
+                    else:
+                        continue
+                    
                     fig.add_annotation(
                         x=x_pos,
                         y=y_pos,
@@ -580,23 +585,23 @@ def arfread(PATH, **kwargs):
     
     isRZ = not RP
     
-    data = {'RecHead': {}, 'groups': []}
+    data = {'metadata': {}, 'groups': []}
 
     # open file
     with open(PATH, 'rb') as fid:
-        # open RecHead data
-        data['RecHead']['ftype'] = struct.unpack('h', fid.read(2))[0]
-        data['RecHead']['ngrps'] = struct.unpack('h', fid.read(2))[0]
-        data['RecHead']['nrecs'] = struct.unpack('h', fid.read(2))[0]
-        data['RecHead']['grpseek'] = struct.unpack('200i', fid.read(4*200))
-        data['RecHead']['recseek'] = struct.unpack('2000i', fid.read(4*2000))
-        data['RecHead']['file_ptr'] = struct.unpack('i', fid.read(4))[0]
+        # open metadata data
+        data['metadata']['ftype'] = struct.unpack('h', fid.read(2))[0]
+        data['metadata']['ngrps'] = struct.unpack('h', fid.read(2))[0]
+        data['metadata']['nrecs'] = struct.unpack('h', fid.read(2))[0]
+        data['metadata']['grpseek'] = struct.unpack('200i', fid.read(4*200))
+        data['metadata']['recseek'] = struct.unpack('2000i', fid.read(4*2000))
+        data['metadata']['file_ptr'] = struct.unpack('i', fid.read(4))[0]
 
         data['groups'] = []
         bFirstPass = True
-        for x in range(data['RecHead']['ngrps']):
+        for x in range(data['metadata']['ngrps']):
             # jump to the group location in the file
-            fid.seek(data['RecHead']['grpseek'][x], 0)
+            fid.seek(data['metadata']['grpseek'][x], 0)
 
             # open the group
             data['groups'].append({
@@ -704,11 +709,11 @@ def arfread(PATH, **kwargs):
                 # skip all 10 cursors placeholders
                 fid.seek(36*10, 1)
                 record_data['data'] = list(struct.unpack(f'{record_data["npts"]}f', fid.read(4*record_data['npts'])))
-
+                #print(record_data['dur_ms'])
                 #record_data['grp_d'] = datetime.datetime.utcfromtimestamp(record_data['grp_t'] / 86400 + datetime.datetime(1970, 1, 1).timestamp()).strftime('%Y-%m-%d %H:%M:%S')
 
                 data['groups'][x]['recs'].append(record_data)
-
+                
             if PLOT:
                 import matplotlib.pyplot as plt
 
@@ -996,7 +1001,7 @@ uploaded_files = tab1.file_uploader("**Upload files to analyze:**", type=["csv",
 is_rz_file = "RZ"
 # Inputs:
 inputs = tab1.expander("Input data properties", expanded=True)
-time_scale = inputs.number_input("Time scale of recording (ms)", value=10.0)
+placeholder = inputs.empty()
 units = inputs.selectbox("Units used in collection", options=['Microvolts', 'Nanovolts'], index=0)
 # baseline_level_str = inputs.text_input("Set Baseline Level", "0.0")
 # baseline_level = float(baseline_level_str)
@@ -1025,7 +1030,7 @@ if uploaded_files:
     selected_dfs = []
     calibration_levels = {}
 
-    
+    duration = None
     # st.sidebar.write("Select files to analyze:")
     for idx, file in enumerate(uploaded_files):
         # Use tempfile
@@ -1070,6 +1075,7 @@ if uploaded_files:
                     else:
                         row = {'Freq(Hz)': freq, 'PostAtten(dB)': db, **wave_data}
                         rows.append(row)
+                    duration = rec['dur_ms']
 
             df = pd.DataFrame(rows)
 
@@ -1085,6 +1091,11 @@ if uploaded_files:
         dfs.append(df)
         if temp_file_path in selected_files:
             selected_dfs.append(df)
+
+    if duration is not None:
+        time_scale = placeholder.number_input("Time scale of recording (detected from .arf, ms)", value=duration, format="%0.6f")
+    else:
+        time_scale = placeholder.number_input("Time scale of recording (ms)", value=10.0)
 
     level = (not is_atten)
 
@@ -1112,7 +1123,7 @@ if uploaded_files:
     else:
         ymin = -5.0
         ymax = 5.0
-    auto_y = outputs.toggle("Auto Y-axis scaling", value=False)
+    auto_y = outputs.toggle("Auto Y-axis scaling", value=True)
     y_min = outputs.number_input("Y-axis minimum", value=ymin, disabled=auto_y)
     y_max = outputs.number_input("Y-axis maximum", value=ymax, disabled=auto_y)
     plot_time_warped = outputs.checkbox("Plot time warped curves", False)
@@ -1122,6 +1133,7 @@ if uploaded_files:
     advanced_settings = tab2.expander("Advanced settings", expanded=False)
     multiply_y_factor = advanced_settings.number_input("Multiply Y values by factor", value=1.0)
     vert_space = advanced_settings.number_input("Vertical space (for stacked curves)", value=25.0, min_value=0.0, step=1.0)
+    stacked_labels = advanced_settings.selectbox("Stacked labels position", options=["left outside", "right outside", "right inside", "off"], index=2)
 
     # Frequency dropdown options
     freq = tab2.selectbox("Select frequency (Hz)", options=distinct_freqs, index=0)
@@ -1147,7 +1159,7 @@ if uploaded_files:
         st.download_button(
             label="Download plot as PDF",
             data=buffer,
-            file_name="figure.pdf",
+            file_name=selected_files[i].split("/")[-1].split('.')[0] + "_f" + str(int(freq))+ "_dB"+str(int(db))+".pdf",
             mime="application/pdf",
         )
     
@@ -1167,7 +1179,7 @@ if uploaded_files:
             st.download_button(
                 label="Download plot as PDF",
                 data=buffer,
-                file_name="figure.pdf",
+                file_name=selected_files[i].split("/")[-1].split('.')[0] + "_f" + str(int(freq))+".pdf",
                 mime="application/pdf",
                 key=f'file{i}'
             )
@@ -1175,7 +1187,7 @@ if uploaded_files:
 
     
     if freqbuttons2.button("Stacked"):
-        fig_list = plot_waves_stacked(freq)
+        fig_list = plot_waves_stacked(freq, stacked_labels=stacked_labels)
         for i in range(len(fig_list)):
             st.plotly_chart(fig_list[i])
         
@@ -1183,12 +1195,12 @@ if uploaded_files:
 
             # Save the figure as a pdf to the buffer
             fig_list[i].write_image(file=buffer, format="pdf")
-
+            
             # Download the pdf from the buffer
             st.download_button(
                 label="Download PDF",
                 data=buffer,
-                file_name="figure.pdf",
+                file_name=selected_files[i].split("/")[-1].split('.')[0] + "_f" + str(int(freq))+ "_stacked.pdf",
                 mime="application/pdf",
                 key=f'file{i}'
             )
@@ -1212,7 +1224,7 @@ if uploaded_files:
             st.download_button(
                 label="Download PDF",
                 data=buffer,
-                file_name="figure.pdf",
+                file_name=selected_files[i].split("/")[-1].split('.')[0] + "_f" + str(int(freq))+ "_3Dplot.pdf",
                 mime="application/pdf",
                 key=f'file{i}'
             )
@@ -1236,7 +1248,7 @@ if uploaded_files:
             st.download_button(
                 label="Download PDF",
                 data=buffer,
-                file_name="figure.pdf",
+                file_name=selected_files[i].split("/")[-1].split('.')[0] + "_f" + str(int(freq))+"IO_plot.pdf",
                 mime="application/pdf",
                 key=f'file{i}'
             )
