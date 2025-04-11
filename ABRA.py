@@ -33,6 +33,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # TODO: use session states so plots don't disappear when downloading files
+# TODO: consider converting freqs to kHz throughout for readability
 
 # Co-authored by: Abhijeeth Erra and Jeffrey Chen
 
@@ -83,26 +84,28 @@ def plot_wave(fig, x_values, y_values, color, name, marker_color=None):
 def calculate_and_plot_wave(df, freq, db):
     db_column = 'Level(dB)' if level else 'PostAtten(dB)'
     khz = df[(df['Freq(Hz)'] == freq) & (df[db_column] == db)]
+
     if not khz.empty:
-        index = khz.index.values[0]
+        #print(len(khz))
+        index = khz.index.values[-1]
+        # why -1 and not 0?
         final = df.loc[index, '0':].dropna()
-        final = pd.to_numeric(final, errors='coerce').dropna()
+        final = pd.to_numeric(final, errors='coerce')#.dropna()
+        # target = int(244 * (time_scale / 10))
+        # y_values = interpolate_and_smooth(final, target)  # Original y-values for plotting
+        # -- NOT ACTUALLY ORIGINAL AS STATED??
+        y_values = final 
+        x_values = np.linspace(0, time_scale, len(y_values))
 
-        target = int(244 * (time_scale / 10))
-        
-        y_values = interpolate_and_smooth(final, target)  # Original y-values for plotting
-        sampling_rate = len(y_values) / time_scale
-
-        x_values = np.linspace(0, len(y_values) / sampling_rate, len(y_values))
-
-        #y_values = interpolate_and_smooth(final[:244])
         if units == 'Nanovolts':
             y_values /= 1000
 
         y_values *= multiply_y_factor
 
         # y_values for peak finding:
-        y_values_fpf = interpolate_and_smooth(y_values[:244])
+        tenms = int((10/time_scale)*len(final))
+        y_values_fpf = interpolate_and_smooth(final[:tenms], 244)
+        #y_values_fpf = interpolate_and_smooth(y_values[:244])
 
         # Flatten the data to scale all values across the group
         flattened_data = y_values_fpf.values.flatten().reshape(-1, 1)
@@ -114,8 +117,9 @@ def calculate_and_plot_wave(df, freq, db):
         # Step 2: Apply min-max scaling
         min_max_scaler = MinMaxScaler(feature_range=(0, 1))
         scaled_data = min_max_scaler.fit_transform(standardized_data).reshape(y_values_fpf.shape)
-
-        y_values_fpf = interpolate_and_smooth(scaled_data[:244])
+        y_values_fpf = scaled_data
+        #y_values_fpf = interpolate_and_smooth(scaled_data[:244])
+        # WHY SMOOTH AGAIN??
 
         highest_peaks, relevant_troughs = peak_finding(y_values_fpf)
 
@@ -426,7 +430,7 @@ def display_metrics_table_all_db(selected_dfs, freqs, db_levels, time_scale):
                         metrics_data['Estimated Threshold'].append(threshold)
 
                         for pk_n in range(1, 6):  # Get up to 5 peaks for metrics
-                            print(f'Peak {pk_n} ({ru})',f'Peak {pk_n} latency (ms)',f'Trough {pk_n} ({ru})',f'Trough {pk_n} latency (ms)')
+                            #print(f'Peak {pk_n} ({ru})',f'Peak {pk_n} latency (ms)',f'Trough {pk_n} ({ru})',f'Trough {pk_n} latency (ms)')
                             peak = highest_peaks[pk_n - 1] if pk_n <= len(highest_peaks) else np.nan
                             trough = relevant_troughs[pk_n - 1] if pk_n <= len(relevant_troughs) else np.nan
                             metrics_data[f'Peak {pk_n} ({ru})'].append(y_values[peak] if not np.isnan(peak) else np.nan) 
@@ -489,7 +493,7 @@ def plot_waves_stacked(freq, stacked_labels=None):
                     # Normalize the waveform
                     if (db_column == 'Level(dB)' and db == max_db) or (db_column == 'PostAtten(dB)' and db == max_db):
                         max_value = np.max(np.abs(final))
-                    final_normalized = final / max_value
+                    final_normalized = final #/ max_value
 
                     # Apply vertical offset
                     if db_column == 'Level(dB)':
@@ -583,20 +587,19 @@ def CFTSread(PATH):
     data_list = []
     for line in data: 
         if not data_start and line.startswith(':'): # Header lines
-            # Check if line contains "FREQ" and get following number:
             if 'FREQ' in line:
-                freqs = [float(line.split('FREQ:')[1].split()[0].strip())]
-                #print('Frequency value:', freq_value)
+                try:
+                    freqs = [float(line.split('FREQ:')[1].split()[0].strip())*1000]
+                except: #Click
+                    freqs = [line.split('FREQ:')[1].split()[0].strip()]
             if 'LEVELS' in line:
                 dbs = (line.split('LEVELS:')[1].strip()[:-1])
                 dbs = [int(dB) for dB in dbs.split(';')]
-                #print('dBs:', dB_list)
-            if 'DATA' in line:
-                data_start = True
             if 'SAMPLE' in line:
                 sample_us = float(line.split('SAMPLE')[1].split(':')[1].strip())
-                #avgs = int(line.split('AVERAGES:')[1].split()[0].strip())
-                #duration_ms = sample_us/1000 * avgs
+            if 'DATA' in line:
+                data_start = True
+
         elif data_start:
             if len(line.strip()) == 0:
                 continue
