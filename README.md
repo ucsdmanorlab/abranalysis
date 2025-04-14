@@ -23,7 +23,6 @@ git clone https://github.com/ucsdmanorlab/abranalysis.git
 Type yes if prompted, then:
 ```
 cd abranalysis
-git checkout testing/peaks
 pip install -r requirements.txt
 ```
 5. Launch the streamlit app:
