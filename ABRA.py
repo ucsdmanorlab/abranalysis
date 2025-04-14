@@ -446,16 +446,22 @@ def display_metrics_table_all_db(selected_dfs, freqs, db_levels, time_scale):
     ru = 'μV'
     if return_units == 'Nanovolts':
         ru = 'nV'
-        
-    metrics_data = {'File Name': [], 'Frequency (Hz)': [], 'dB Level': [], 
-                    f'Wave I amplitude (P1-T1) ({ru})': [], 'Latency to First Peak (ms)': [], 
-                    'Amplitude Ratio (Peak1/Peak4)': [], 'Estimated Threshold': [],
-                    f'Peak 1 ({ru})': [], 'Peak 1 latency (ms)': [], f'Trough 1 ({ru})': [], 'Trough 1 latency (ms)': [],
-                    f'Peak 2 ({ru})': [], 'Peak 2 latency (ms)': [], f'Trough 2 ({ru})': [], 'Trough 2 latency (ms)': [],
-                    f'Peak 3 ({ru})': [], 'Peak 3 latency (ms)': [], f'Trough 3 ({ru})': [], 'Trough 3 latency (ms)': [],
-                    f'Peak 4 ({ru})': [], 'Peak 4 latency (ms)': [], f'Trough 4 ({ru})': [], 'Trough 4 latency (ms)': [],
-                    f'Peak 5 ({ru})': [], 'Peak 5 latency (ms)': [], f'Trough 5 ({ru})': [], 'Trough 5 latency (ms)': [],
-                    }
+    
+    if all_peaks:
+        metrics_data = {'File Name': [], 'Frequency (Hz)': [], 'dB Level': [], 
+                        f'Wave I amplitude (P1-T1) ({ru})': [], 'Latency to First Peak (ms)': [], 
+                        'Amplitude Ratio (Peak1/Peak4)': [], 'Estimated Threshold': [],
+                        f'Peak 1 ({ru})': [], 'Peak 1 latency (ms)': [], f'Trough 1 ({ru})': [], 'Trough 1 latency (ms)': [],
+                        f'Peak 2 ({ru})': [], 'Peak 2 latency (ms)': [], f'Trough 2 ({ru})': [], 'Trough 2 latency (ms)': [],
+                        f'Peak 3 ({ru})': [], 'Peak 3 latency (ms)': [], f'Trough 3 ({ru})': [], 'Trough 3 latency (ms)': [],
+                        f'Peak 4 ({ru})': [], 'Peak 4 latency (ms)': [], f'Trough 4 ({ru})': [], 'Trough 4 latency (ms)': [],
+                        f'Peak 5 ({ru})': [], 'Peak 5 latency (ms)': [], f'Trough 5 ({ru})': [], 'Trough 5 latency (ms)': [],
+                        }
+    else:
+         metrics_data = {'File Name': [], 'Frequency (Hz)': [], 'dB Level': [], 
+                        f'Wave I amplitude (P1-T1) ({ru})': [], 'Latency to First Peak (ms)': [], 
+                        'Amplitude Ratio (Peak1/Peak4)': [], 'Estimated Threshold': [],
+                        }
 
     for file_df, file_name in zip(selected_dfs, selected_files):
         for freq in freqs:
@@ -495,13 +501,14 @@ def display_metrics_table_all_db(selected_dfs, freqs, db_levels, time_scale):
                         metrics_data['Amplitude Ratio (Peak1/Peak4)'].append(amplitude_ratio)
                         metrics_data['Estimated Threshold'].append(threshold)
 
-                        for pk_n in range(1, 6):  # Get up to 5 peaks for metrics
-                            peak = highest_peaks[pk_n - 1] if pk_n <= len(highest_peaks) else np.nan
-                            trough = relevant_troughs[pk_n - 1] if pk_n <= len(relevant_troughs) else np.nan
-                            metrics_data[f'Peak {pk_n} ({ru})'].append(y_values[peak] if not np.isnan(peak) else np.nan) 
-                            metrics_data[f'Peak {pk_n} latency (ms)'].append(peak * (time_scale / len(y_values)))  
-                            metrics_data[f'Trough {pk_n} ({ru})'].append(y_values[trough] if not np.isnan(trough) else np.nan)
-                            metrics_data[f'Trough {pk_n} latency (ms)'].append(trough * (time_scale / len(y_values)))
+                        if all_peaks:
+                            for pk_n in range(1, 6):  # Get up to 5 peaks for metrics
+                                peak = highest_peaks[pk_n - 1] if pk_n <= len(highest_peaks) else np.nan
+                                trough = relevant_troughs[pk_n - 1] if pk_n <= len(relevant_troughs) else np.nan
+                                metrics_data[f'Peak {pk_n} ({ru})'].append(y_values[peak] if not np.isnan(peak) else np.nan) 
+                                metrics_data[f'Peak {pk_n} latency (ms)'].append(peak * (time_scale / len(y_values)))  
+                                metrics_data[f'Trough {pk_n} ({ru})'].append(y_values[trough] if not np.isnan(trough) else np.nan)
+                                metrics_data[f'Trough {pk_n} latency (ms)'].append(trough * (time_scale / len(y_values)))
 
     metrics_table = pd.DataFrame(metrics_data)
     st.dataframe(metrics_table, hide_index=True, use_container_width=True)
@@ -1226,6 +1233,7 @@ if uploaded_files:
     multiply_y_factor = advanced_settings.number_input("Multiply Y values by factor", value=1.0)
     vert_space = advanced_settings.number_input("Vertical space (for stacked curves)", value=10.0, min_value=0.0, step=1.0)
     stacked_labels = advanced_settings.selectbox("Stacked labels position", options=["Left outside", "Right outside", "Right inside", "Off"], index=2)
+    all_peaks = advanced_settings.toggle("Output all peaks and troughs (experimental)", value=False)
 
     # Frequency dropdown options
     freq = tab2.selectbox("Select frequency (Hz)", options=distinct_freqs, index=0)
