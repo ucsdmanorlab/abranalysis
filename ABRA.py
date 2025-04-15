@@ -93,7 +93,7 @@ def calculate_and_plot_wave(df, freq, db):
         y_values *= multiply_y_factor
 
         # y_values for peak finding:
-        tenms = int((10/time_scale)*len(final))
+        tenms = max(len(final), int((10/time_scale)*len(final)))
         y_values_fpf = interpolate_and_smooth(final[:tenms], 244)
         #y_values_fpf = interpolate_and_smooth(y_values[:244])
 
@@ -148,7 +148,7 @@ def plot_waves_single_dB(df, db, y_min, y_max, plot_time_warped=False):
 
                 color = glasbey_colors[i]
                 width = 2
-                name = f'{int(freq)} Hz'
+                name = freq if type(freq)==str else f'{int(freq)} Hz'
                 
                 fig.add_trace(go.Scatter(x=x_values, y=y_values, mode='lines', name=name, line=dict(color=color, width=width)))
                 
@@ -169,7 +169,7 @@ def plot_waves_single_dB(df, db, y_min, y_max, plot_time_warped=False):
                 for i, freq in enumerate(freqs):
                     color = glasbey_colors[i]
                     width = 2
-                    name = f'{int(freq)} Hz'
+                    name = freq if type(freq)==str else f'{int(freq)} Hz'
                     fig.add_trace(go.Scatter(x=np.linspace(0, time_scale, len(warped_waves_array[i])), y=warped_waves_array[i], mode='lines', name=name, line=dict(color=color, width=width)))
             except IndexError:
                 pass
@@ -438,29 +438,26 @@ def display_metrics_table(df, freq, db, baseline_level): # UNUSED
         return styled_metrics_table
 
 def display_metrics_table_all_db(selected_dfs, freqs, db_levels, time_scale):
+    metrics_data = {'File Name': [], 'Frequency (Hz)': [], 'dB Level': [],}
     if level:
         db_column = 'Level(dB)'
     else:
         db_column = 'PostAtten(dB)'
+        metrics_data = {**metrics_data, 'Attenuation (dB)':[], 'Calibration Level (dB)': []}
 
     ru = 'μV'
     if return_units == 'Nanovolts':
         ru = 'nV'
     
+    metrics_data = {**metrics_data, f'Wave I amplitude (P1-T1) ({ru})': [], 'Latency to First Peak (ms)': [], 
+                        'Amplitude Ratio (Peak1/Peak4)': [], 'Estimated Threshold': []}
     if all_peaks:
-        metrics_data = {'File Name': [], 'Frequency (Hz)': [], 'dB Level': [], 
-                        f'Wave I amplitude (P1-T1) ({ru})': [], 'Latency to First Peak (ms)': [], 
-                        'Amplitude Ratio (Peak1/Peak4)': [], 'Estimated Threshold': [],
+        metrics_data = {**metrics_data,
                         f'Peak 1 ({ru})': [], 'Peak 1 latency (ms)': [], f'Trough 1 ({ru})': [], 'Trough 1 latency (ms)': [],
                         f'Peak 2 ({ru})': [], 'Peak 2 latency (ms)': [], f'Trough 2 ({ru})': [], 'Trough 2 latency (ms)': [],
                         f'Peak 3 ({ru})': [], 'Peak 3 latency (ms)': [], f'Trough 3 ({ru})': [], 'Trough 3 latency (ms)': [],
                         f'Peak 4 ({ru})': [], 'Peak 4 latency (ms)': [], f'Trough 4 ({ru})': [], 'Trough 4 latency (ms)': [],
                         f'Peak 5 ({ru})': [], 'Peak 5 latency (ms)': [], f'Trough 5 ({ru})': [], 'Trough 5 latency (ms)': [],
-                        }
-    else:
-         metrics_data = {'File Name': [], 'Frequency (Hz)': [], 'dB Level': [], 
-                        f'Wave I amplitude (P1-T1) ({ru})': [], 'Latency to First Peak (ms)': [], 
-                        'Amplitude Ratio (Peak1/Peak4)': [], 'Estimated Threshold': [],
                         }
 
     for file_df, file_name in zip(selected_dfs, selected_files):
@@ -496,6 +493,8 @@ def display_metrics_table_all_db(selected_dfs, freqs, db_levels, time_scale):
                             metrics_data['dB Level'].append(db)
                         else:
                             metrics_data['dB Level'].append(calibration_levels[(df.name, freq)] - db)
+                            metrics_data['Attenuation (dB)'].append(db)
+                            metrics_data['Calibration Level (dB)'].append(calibration_levels[(df.name, freq)])
                         metrics_data[f'Wave I amplitude (P1-T1) ({ru})'].append(first_peak_amplitude)
                         metrics_data['Latency to First Peak (ms)'].append(latency_to_first_peak)
                         metrics_data['Amplitude Ratio (Peak1/Peak4)'].append(amplitude_ratio)
@@ -523,9 +522,14 @@ def plot_waves_stacked(freq, stacked_labels=None):
     fig_list = []
     for idx, file_df in enumerate(selected_dfs):
         fig = go.Figure()
-
+        if freq not in file_df['Freq(Hz)'].unique():
+            st.write(f"Frequency {freq} not found in file {selected_files[idx]}")
+            continue
         # Get unique dB levels and color palette
-        unique_dbs = sorted(file_df[db_column].unique())
+        df_filtered = file_df[file_df['Freq(Hz)'] == freq]
+        unique_dbs = sorted(df_filtered[db_column].unique())
+        if not level:
+            unique_dbs = sorted(unique_dbs, reverse=True)
         num_dbs = len(unique_dbs)
         vertical_spacing = vert_space / num_dbs
         db_offsets = {db: y_min + i * vertical_spacing for i, db in enumerate(unique_dbs)}
@@ -581,7 +585,7 @@ def plot_waves_stacked(freq, stacked_labels=None):
                                             name=f'{int(db)} dB',
                                             line=dict(color=color_scale)))
 
-                    if (db_column == 'Level(dB)' and db == threshold) or (db_column == 'PostAtten(dB)' and db == threshold):
+                    if (db_column == 'Level(dB)' and db == threshold) or (db_column == 'PostAtten(dB)' and calibration_level[0] - db == threshold):
                         is_thresh=True
                         fig.add_trace(go.Scatter(x=np.linspace(0, time_scale, len(y_values)),
                                                 y=y_values,
@@ -590,12 +594,14 @@ def plot_waves_stacked(freq, stacked_labels=None):
                                                 line=dict(color='black', width=5),
                                                 #showlegend=True
                                                 ))
+                        
+                    y_pos = db_offsets[db] if level else db_offsets[calibration_level[0] - db]
                     if stacked_labels=="Left outside":
-                        x_pos = 0; y_pos = db_offsets[db]
+                        x_pos = 0; 
                     elif stacked_labels=="Right outside":
-                        x_pos = time_scale*1.1; y_pos = db_offsets[db]
+                        x_pos = time_scale*1.1; 
                     elif stacked_labels=="Right inside":
-                        x_pos = time_scale; y_pos = db_offsets[db] + vert_space/num_dbs/3 #y_values.iloc[-1]
+                        x_pos = time_scale; y_pos = y_pos + vert_space/num_dbs/3 #y_values.iloc[-1]
                     else:
                         continue
                     
@@ -678,7 +684,7 @@ def CFTSread(PATH):
 
     data = np.array(data_list)
 
-    duration_ms = data.shape[0] * sample_us/1000
+    duration_ms = (data.shape[0]-1) * sample_us/1000
     rows = []
     
     for dB_i in range(len(dbs)):
@@ -849,19 +855,17 @@ def calculate_hearing_threshold(df, freq, multiply_y_factor=1):
     waves = []
 
     for db in db_levels:
-        khz = df_filtered[df_filtered[db_column] == np.abs(db)]
+        khz = df_filtered[df_filtered[db_column] == db] #np.abs(db)]
         if not khz.empty:
             index = khz.index.values[-1]
             final = df_filtered.loc[index, '0':].dropna()
             final = pd.to_numeric(final, errors='coerce')
             final = np.array(final, dtype=np.float64)
-            target = int(244 * (time_scale / 10))
-            y_values = interpolate_and_smooth(final, target) # this is unused?
-            # should be???: 
-            # take_values = len(final) * (10 / time_scale) 
-            # final = interpolate_and_smooth(final[:int(take_values)], 244)
+            
+            tenms = max(len(final), int((10/time_scale)*len(final)))
+            final = interpolate_and_smooth(final[:tenms], 244)
 
-            final = interpolate_and_smooth(final[:244])
+            # final = interpolate_and_smooth(final[:244])
             final *= multiply_y_factor
 
             if units == 'Nanovolts':
@@ -1200,6 +1204,7 @@ if uploaded_files:
     db_column = 'Level(dB)' if level else 'PostAtten(dB)'
 
     # Get distinct frequency and dB level values across all files
+    print(pd.concat([df['Freq(Hz)'] for df in dfs]).unique())
     distinct_freqs = sorted(pd.concat([df['Freq(Hz)'] for df in dfs]).unique())
     distinct_dbs = sorted(pd.concat([df['Level(dB)'] if level else df['PostAtten(dB)'] for df in dfs]).unique())
 
@@ -1211,6 +1216,8 @@ if uploaded_files:
                 key = (os.path.basename(file), hz)
                 calibration_levels[key] = cal_levels.number_input(f"Calibration dB for {os.path.basename(file)} at {hz} Hz", 
                                                                   value=100.0, step=5.0, format="%0.1f",)
+        # TODO: add option to set legend to show attenuation
+        #atten_legend = cal_levels.toggle("Use attenuation levels in plot legends", value=False)
 
     # Output settings:
     outputs = tab2.expander("Output and plot settings", expanded=False)
@@ -1237,15 +1244,19 @@ if uploaded_files:
 
     # Frequency dropdown options
     freq = tab2.selectbox("Select frequency (Hz)", options=distinct_freqs, index=0)
+    allowed_dbs = sorted(pd.concat([df[df['Freq(Hz)']==freq]['Level(dB)'] if level else df[df['Freq(Hz)']==freq]['PostAtten(dB)'] for df in dfs]).unique())
 
     # dB Level dropdown options, default to last (highest) dB)
-    db = tab2.selectbox(f'Select dB', options=distinct_dbs, index=len(distinct_dbs)-1 if len(distinct_dbs) > 0 else 0)
+    db = tab2.selectbox("Select dB" if level else "Select dB (attenuation)", 
+                        options=allowed_dbs, 
+                        index=len(allowed_dbs)-1 if len(allowed_dbs) > 0 and level else 0)
     
     # Create a plotly figure
-    fig = go.Figure()
+    #fig = go.Figure()
     tab2.header("Plot:")
-
-    if tab2.button("Single wave ("+str(freq/1000)+" kHz, "+str(int(db))+" dB)", use_container_width=True):
+    freq_str = freq if type(freq) == str else str(freq/1000) + " kHz"
+    db_str = str(int(db)) + " dB"
+    if tab2.button("Single wave ("+freq_str+", "+db_str+")", use_container_width=True):
         fig = plot_waves_single_tuple(freq, db, y_min, y_max)
         st.plotly_chart(fig)
         display_metrics_table_all_db(selected_dfs, [freq], [db], time_scale)
@@ -1259,7 +1270,7 @@ if uploaded_files:
         st.download_button(
             label="Download plot as PDF",
             data=buffer,
-            file_name=(selected_files[0].split("/")[-1].split('.')[0] + "_f" + str(int(freq))+ "_dB"+str(int(db))+".pdf") if len(selected_files)==1 else "all_files_f" + str(int(freq))+ "_dB"+str(int(db))+".pdf",
+            file_name=(selected_files[0].split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+ "_"+db_str.replace(' ','')+".pdf") if len(selected_files)==1 else "all_files_" +freq_str.replace(' ','')+ "_"+db_str.replace(' ','')+".pdf",
             mime="application/pdf",
         )
     
@@ -1279,7 +1290,7 @@ if uploaded_files:
             st.download_button(
                 label="Download plot as PDF",
                 data=buffer,
-                file_name=selected_files[i].split("/")[-1].split('.')[0] + "_f" + str(int(freq))+".pdf",
+                file_name=selected_files[i].split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+".pdf",
                 mime="application/pdf",
                 key=f'file{i}'
             )
@@ -1300,7 +1311,7 @@ if uploaded_files:
             st.download_button(
                 label="Download plot as PDF",
                 data=buffer,
-                file_name=selected_files[i].split("/")[-1].split('.')[0] + "_f" + str(int(freq))+ "_stacked.pdf",
+                file_name=selected_files[i].split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+ "_stacked.pdf",
                 mime="application/pdf",
                 key=f'file{i}'
             )
@@ -1341,7 +1352,7 @@ if uploaded_files:
             st.download_button(
                 label="Download plot as PDF",
                 data=buffer,
-                file_name=selected_files[i].split("/")[-1].split('.')[0] + "_f" + str(int(freq))+ "_3Dplot.pdf",
+                file_name=selected_files[i].split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+ "_3Dplot.pdf",
                 mime="application/pdf",
                 key=f'file{i}'
             )
@@ -1365,7 +1376,7 @@ if uploaded_files:
             st.download_button(
                 label="Download plot as PDF",
                 data=buffer,
-                file_name=selected_files[i].split("/")[-1].split('.')[0] + "_f" + str(int(freq))+"IO_plot.pdf",
+                file_name=selected_files[i].split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+"IO_plot.pdf",
                 mime="application/pdf",
                 key=f'file{i}'
             )
