@@ -126,7 +126,7 @@ def plot_waves_single_dB(df, db, y_min, y_max, plot_time_warped=False):
     fig_list = []
     for idx, file_df in enumerate(selected_dfs):
         if db not in file_df[db_column].unique():
-            st.write(f"dB {db} not found in file {selected_files[idx]}")
+            st.write(f"dB {db} not found in file {selected_files[idx].split('/')[-1]}")
             continue
         fig = go.Figure()
         df_filtered = file_df[file_df[db_column] == db]
@@ -205,7 +205,7 @@ def plot_waves_single_frequency(df, freq, y_min, y_max, plot_time_warped=False):
     for idx, file_df in enumerate(selected_dfs):
         # check if frequency exists in df:
         if freq not in file_df['Freq(Hz)'].unique():
-            st.write(f"Frequency {freq} not found in file {selected_files[idx]}")
+            st.write(f"Frequency {freq} not found in file {selected_files[idx].split('/')[-1]}")
             continue
         #try:
         fig = go.Figure()
@@ -523,7 +523,7 @@ def plot_waves_stacked(freq, stacked_labels=None):
     for idx, file_df in enumerate(selected_dfs):
         fig = go.Figure()
         if freq not in file_df['Freq(Hz)'].unique():
-            st.write(f"Frequency {freq} not found in file {selected_files[idx]}")
+            st.write(f"Frequency {freq} not found in file {selected_files[idx].split('/')[-1]}")
             continue
         # Get unique dB levels and color palette
         df_filtered = file_df[file_df['Freq(Hz)'] == freq]
@@ -864,7 +864,6 @@ def calculate_hearing_threshold(df, freq, multiply_y_factor=1):
             
             tenms = max(len(final), int((10/time_scale)*len(final)))
             final = interpolate_and_smooth(final[:tenms], 244)
-
             # final = interpolate_and_smooth(final[:244])
             final *= multiply_y_factor
 
@@ -913,10 +912,15 @@ def all_thresholds():
                'Threshold': []}
     for (file_df, file_name) in zip(selected_dfs, selected_files):
         for hz in distinct_freqs:
-            thresh = np.nan
+            if hz not in file_df['Freq(Hz)'].unique():
+                continue
+            # df_filtered = file_df[(file_df['Freq(Hz)'] == hz)]
+            # if df_filtered.empty:
+            #     continue
             try:
                 thresh = calculate_hearing_threshold(file_df, hz)
             except:
+                thresh = np.nan
                 pass
             df_dict['Filename'].append(file_name.split("/")[-1])
             df_dict['Frequency'].append(hz)
@@ -1204,7 +1208,6 @@ if uploaded_files:
     db_column = 'Level(dB)' if level else 'PostAtten(dB)'
 
     # Get distinct frequency and dB level values across all files
-    print(pd.concat([df['Freq(Hz)'] for df in dfs]).unique())
     distinct_freqs = sorted(pd.concat([df['Freq(Hz)'] for df in dfs]).unique())
     distinct_dbs = sorted(pd.concat([df['Level(dB)'] if level else df['PostAtten(dB)'] for df in dfs]).unique())
 
