@@ -1246,10 +1246,10 @@ if uploaded_files:
     all_peaks = advanced_settings.toggle("Output all peaks and troughs (experimental)", value=False)
 
     # Frequency dropdown options
-    freq = tab2.selectbox("Select frequency (Hz)", options=distinct_freqs, index=0)
-    allowed_dbs = sorted(pd.concat([df[df['Freq(Hz)']==freq]['Level(dB)'] if level else df[df['Freq(Hz)']==freq]['PostAtten(dB)'] for df in dfs]).unique())
-
+    allowed_freqs = sorted(pd.concat([df['Freq(Hz)'] for df in selected_dfs]).unique())
+    freq = tab2.selectbox("Select frequency (Hz)", options=allowed_freqs, index=0)
     # dB Level dropdown options, default to last (highest) dB)
+    allowed_dbs = sorted(pd.concat([df[df['Freq(Hz)']==freq]['Level(dB)'] if level else df[df['Freq(Hz)']==freq]['PostAtten(dB)'] for df in selected_dfs]).unique())
     db = tab2.selectbox("Select dB" if level else "Select dB (attenuation)", 
                         options=allowed_dbs, 
                         index=len(allowed_dbs)-1 if len(allowed_dbs) > 0 and level else 0)
