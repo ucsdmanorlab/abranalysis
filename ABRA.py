@@ -561,15 +561,15 @@ def plot_waves_stacked(freq, stacked_labels=None):
                     final = file_df.loc[index, '0':].dropna()
                     final = pd.to_numeric(final, errors='coerce')
                     final = interpolate_and_smooth(final)
-                    final *= multiply_y_factor
+                    # final *= multiply_y_factor
 
-                    if units == 'Nanovolts':
-                        final /= 1000
+                    # if units == 'Nanovolts':
+                    #     final /= 1000
 
                     # Normalize the waveform
                     if (db_column == 'Level(dB)' and db == max_db) or (db_column == 'PostAtten(dB)' and db == max_db):
                         max_value = np.max(np.abs(final))
-                    final_normalized = final #/ max_value
+                    final_normalized = final / max_value
 
                     # Apply vertical offset
                     if db_column == 'Level(dB)':
