@@ -93,7 +93,7 @@ def calculate_and_plot_wave(df, freq, db):
         y_values *= multiply_y_factor
 
         # y_values for peak finding:
-        tenms = max(len(final), int((10/time_scale)*len(final)))
+        tenms = int((10/time_scale)*len(final))
         y_values_fpf = interpolate_and_smooth(final[:tenms], 244)
         #y_values_fpf = interpolate_and_smooth(y_values[:244])
 
@@ -862,7 +862,7 @@ def calculate_hearing_threshold(df, freq, multiply_y_factor=1):
             final = pd.to_numeric(final, errors='coerce')
             final = np.array(final, dtype=np.float64)
             
-            tenms = max(len(final), int((10/time_scale)*len(final)))
+            tenms = int((10/time_scale)*len(final))
             final = interpolate_and_smooth(final[:tenms], 244)
             # final = interpolate_and_smooth(final[:244])
             final *= multiply_y_factor
