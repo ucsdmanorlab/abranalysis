@@ -50,28 +50,27 @@ def createSettings_DC():
         vert_space=vert_space,
     )
     return input_settings, output_settings
-def createSettings():
-    input_settings = {
-            'time_scale': time_scale,
-            'level': level,
-            'units': units,
-            'calibration_levels': calibration_levels,
-            'multiply_y_factor': multiply_y_factor
-        }
-    output_settings = {
-            'return_units': return_units,
-            'smooth_on': smooth_on,
-            'all_peaks': all_peaks,
-            'serif_font': serif_font,
-            'show_peaks': show_peaks,
-            'show_legend': show_legend,
-            'plot_time_warped': plot_time_warped,
-            'auto_y': auto_y,
-            'y_min': y_min,
-            'y_max': y_max,
-            'vert_space': vert_space,
-        }
-    return input_settings, output_settings
+
+
+def check_settings_and_clear_cache():
+    calc_settings = {
+        'time_scale': st.session_state.get('time_scale', 10.0),
+        'multiply_y_factor': st.session_state.get('multiply_y_factor', 1.0),
+        'units': st.session_state.get('units', 'Microvolts'),
+        'smooth_on': st.session_state.get('smooth_on', True),
+        'return_units': st.session_state.get('return_units', 'Microvolts'),
+        'calibration_levels': dict(st.session_state.get('calibration_levels', {}))
+    }
+    
+    # Check if settings changed
+    if 'previous_calc_settings' in st.session_state:
+        if st.session_state.previous_calc_settings != calc_settings:
+            if 'calculated_thresholds' in st.session_state:
+                st.session_state.calculated_thresholds.clear()
+            if 'calculated_waves' in st.session_state:
+                st.session_state.calculated_waves.clear()
+    
+    st.session_state.previous_calc_settings = calc_settings
 
 def plot_waves_single_dB(selected_dfs, selected_files, db, y_min, y_max, input_settings, output_settings, plot_time_warped=False):
     db_column = 'Level(dB)' if input_settings.level else 'PostAtten(dB)'
@@ -615,7 +614,7 @@ def main():
     # Inputs:
     inputs = tab1.expander("Input data properties", expanded=True)
     placeholder = inputs.empty()
-    units = inputs.selectbox("Units used in collection", options=['Microvolts', 'Nanovolts'], index=0)
+    units = inputs.selectbox("Units used in collection", options=['Microvolts', 'Nanovolts'], index=0, key="units")
     # baseline_level_str = inputs.text_input("Set Baseline Level", "0.0")
     # baseline_level = float(baseline_level_str)
     is_click = inputs.radio("Tone or click? (for .arf files)", ("Tone", "Click"), horizontal=True)
@@ -627,9 +626,9 @@ def main():
         dfs, duration = process_uploaded_files_cached(uploaded_files, is_rz_file, click, is_atten)
 
         if duration is not None:
-            time_scale = placeholder.number_input("Time scale of recording (detected from file, ms)", value=duration, format="%0.6f")
+            time_scale = placeholder.number_input("Time scale of recording (detected from file, ms)", value=duration, format="%0.6f", key="time_scale")
         else:
-            time_scale = placeholder.number_input("Time scale of recording (ms)", value=10.0)
+            time_scale = placeholder.number_input("Time scale of recording (ms)", value=10.0, key="time_scale")
 
         tab2.write("**Select files to analyze:**")
         for idx, df in enumerate(dfs):
@@ -668,7 +667,7 @@ def main():
 
         # Output settings:
         outputs = tab2.expander("Output and plot settings", expanded=False)
-        return_units = outputs.selectbox("Units for plots and outputs", options=['Microvolts', 'Nanovolts'], index=0)
+        return_units = outputs.selectbox("Units for plots and outputs", options=['Microvolts', 'Nanovolts'], index=0, key="return_units")
         if return_units == 'Nanovolts':
             ymin = -5000.0
             ymax = 5000.0
@@ -684,12 +683,14 @@ def main():
         serif_font = outputs.toggle("Use serif fonts in plots", value=False)
 
         advanced_settings = tab2.expander("Advanced settings", expanded=False)
-        multiply_y_factor = advanced_settings.number_input("Multiply Y values by factor", value=1.0)
+        multiply_y_factor = advanced_settings.number_input("Multiply Y values by factor", value=1.0, key="multiply_y_factor")
         vert_space = advanced_settings.number_input("Vertical space (for stacked curves)", value=10.0, min_value=0.0, step=1.0)
         stacked_labels = advanced_settings.selectbox("Stacked labels position", options=["Left outside", "Right outside", "Right inside", "Off"], index=2)
         all_peaks = advanced_settings.toggle("Output all peaks and troughs (experimental)", value=False)
-        smooth_on = advanced_settings.toggle("Smooth wave", value=True)
+        smooth_on = advanced_settings.toggle("Smooth wave", value=True, key="smooth_on")
         
+        check_settings_and_clear_cache()
+
         # Frequency dropdown options
         allowed_freqs = sorted(pd.concat([df['Freq(Hz)'] for df in selected_dfs]).unique())
         freq = tab2.selectbox("Select frequency (Hz)", options=allowed_freqs, index=0)
