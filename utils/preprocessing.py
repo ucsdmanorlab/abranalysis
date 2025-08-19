@@ -304,7 +304,6 @@ def calculate_and_plot_wave_exact(df, freq, db, peak_finding_model=default_peak_
         return None, None, None, None
     
 def calculate_and_plot_wave_orig(df, freq, db, peak_finding_model=default_peak_finding_model(), input_settings=None): 
-    print(input_settings)
     if input_settings is None:
         input_settings = {
             'time_scale': 10,
