@@ -215,13 +215,26 @@ def display_metrics_table_all_db(selected_dfs, selected_files, freqs, db_levels,
 
 def calculate_and_plot_wave(df, freq, db, input_settings, output_settings, peak_finding_model=default_peak_finding_model()):
     
+    file_name = getattr(df, 'name', 'unknown_file')
+    cache_key = f"wave_{file_name}_{freq}_{db}_{output_settings.smooth_on}"
+
+    if 'calculated_waves' not in st.session_state:
+        st.session_state.calculated_waves = {}
+
+    if cache_key in st.session_state.calculated_waves:
+        return st.session_state.calculated_waves[cache_key]
+
     if output_settings.smooth_on:
-        return calculate_and_plot_wave_orig(df, freq, db, input_settings, peak_finding_model)
+        result = calculate_and_plot_wave_orig(df, freq, db, input_settings, peak_finding_model)
     else:
-        return calculate_and_plot_wave_exact(df, freq, db, input_settings, peak_finding_model)
+        result = calculate_and_plot_wave_exact(df, freq, db, input_settings, peak_finding_model)
+
+    st.session_state.calculated_waves[cache_key] = result
+    return result
 
 def calculate_and_plot_wave_exact(df, freq, db, input_settings, peak_finding_model=default_peak_finding_model(), 
                                   ):
+    
     db_column = 'Level(dB)' if input_settings.level else 'PostAtten(dB)'
     khz = df[(df['Freq(Hz)'] == freq) & (df[db_column] == db)]
 

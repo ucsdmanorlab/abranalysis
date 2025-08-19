@@ -197,7 +197,15 @@ def clear_calculation_cache_for_files(file_names):
                 keys_to_remove.append(key)
         for key in keys_to_remove:
             del st.session_state.calculated_thresholds[key]
-            
+    
+    if 'calculated_waves' in st.session_state:
+        keys_to_remove = []
+        for key in st.session_state.calculated_waves.keys():
+            if any(file_name in key for file_name in file_names):
+                keys_to_remove.append(key)
+        for key in keys_to_remove:
+            del st.session_state.calculated_waves[key]
+
 def process_uploaded_files_cached(uploaded_files, is_rz_file, click, is_atten):
     """Process files only once and cache in session state"""
     # Create a cache key based on file names and settings

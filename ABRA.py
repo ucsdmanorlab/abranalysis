@@ -24,7 +24,7 @@ warnings.filterwarnings('ignore')
 # TODO: consider converting freqs to kHz throughout for readability
 # TODO: correct units 
 # TODO: fix IO curve bug for multiple tsv files
-# TODO: switch from dictionary to dataclass for settings
+# TODO: make 3D plots work for tsv files
 
 # Co-authored by: Abhijeeth Erra and Jeffrey Chen
 
