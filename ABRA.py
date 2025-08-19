@@ -13,8 +13,8 @@ import streamlit as st
 
 from kneed import KneeLocator
 from sklearn.neighbors import NearestNeighbors
-from utils.preprocessing import interpolate_and_smooth, calculate_and_plot_wave, display_metrics_table_all_db, calculate_hearing_threshold
-from utils.plotting import apply_units, style_layout, add_peaks_troughs
+from utils.calculate import interpolate_and_smooth, calculate_and_plot_wave, display_metrics_table_all_db, calculate_hearing_threshold
+from utils.plotting import apply_units, style_layout
 from utils.settings import InputSettings, OutputSettings
 from utils.processFiles import get_selected_data, process_uploaded_files_cached
 import warnings

@@ -6,7 +6,7 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from scipy.signal import find_peaks
 from scipy.ndimage import gaussian_filter1d
 from .models import default_peak_finding_model, default_thresholding_model
-
+import streamlit as st
 
 def interpolate_and_smooth(y, target_length=244):
     x = np.linspace(0, 1, len(y))
@@ -64,7 +64,15 @@ def peak_finding(wave, peak_finding_model):
     return highest_smoothed_peaks, relevant_troughs
 
 def calculate_hearing_threshold(df, freq, input_settings):
+    file_name = getattr(df, 'name', 'unknown_file')
+    cache_key = f"threshold_{file_name}_{freq}"
 
+    if 'calculated_thresholds' not in st.session_state:
+        st.session_state.calculated_thresholds = {}
+
+    if cache_key in st.session_state.calculated_thresholds:
+        return st.session_state.calculated_thresholds[cache_key]
+    
     db_column = 'Level(dB)' if input_settings.level else 'PostAtten(dB)'
 
     thresholding_model = default_thresholding_model()
@@ -125,6 +133,7 @@ def calculate_hearing_threshold(df, freq, input_settings):
         else:
             lowest_db = d
             previous_prediction = p
+    st.session_state.calculated_thresholds[cache_key] = lowest_db
 
     return lowest_db
 
@@ -162,7 +171,7 @@ def display_metrics_table_all_db(selected_dfs, selected_files, freqs, db_levels,
                 pass
 
             for db in db_levels:
-                _, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db, input_settings=input_settings, output_settings=output_settings)
+                _, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db, input_settings, output_settings)
                 if y_values is None:
                     continue
                 if output_settings.return_units == 'Nanovolts':

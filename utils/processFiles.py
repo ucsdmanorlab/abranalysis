@@ -189,6 +189,15 @@ def arfread(PATH, **kwargs):
 
     return data
 
+def clear_calculation_cache_for_files(file_names):
+    if 'calculated_thresholds' in st.session_state:
+        keys_to_remove = []
+        for key in st.session_state.calculated_thresholds.keys():
+            if any(file_name in key for file_name in file_names):
+                keys_to_remove.append(key)
+        for key in keys_to_remove:
+            del st.session_state.calculated_thresholds[key]
+            
 def process_uploaded_files_cached(uploaded_files, is_rz_file, click, is_atten):
     """Process files only once and cache in session state"""
     # Create a cache key based on file names and settings
@@ -199,6 +208,8 @@ def process_uploaded_files_cached(uploaded_files, is_rz_file, click, is_atten):
     if 'processed_data_cache_key' in st.session_state and st.session_state.processed_data_cache_key == cache_key:
         return st.session_state.processed_dfs, st.session_state.processed_duration
     
+    clear_calculation_cache_for_files(file_names)
+
     dfs = []
     duration = None
 

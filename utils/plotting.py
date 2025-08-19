@@ -19,10 +19,3 @@ def style_layout(fig, title, output_settings):
     if not output_settings.auto_y:
         fig.update_layout(yaxis_range=[output_settings.y_min, output_settings.y_max])
     return fig
-
-def add_peaks_troughs(fig, x_values, y_values, peaks, troughs, show_legend):
-    fig.add_trace(go.Scatter(x=x_values[peaks], y=y_values[peaks], mode='markers',
-                             marker=dict(color='red'), name='Peaks', showlegend=show_legend))
-    fig.add_trace(go.Scatter(x=x_values[troughs], y=y_values[troughs], mode='markers',
-                             marker=dict(color='blue'), name='Troughs', showlegend=show_legend))
-
