@@ -215,12 +215,12 @@ def plot_waves_single_frequency(selected_dfs, selected_files, freq, y_min, y_max
 
 def plot_waves_single_tuple(selected_dfs, selected_files, freq, db, input_settings, output_settings):
     fig = go.Figure()
-
+    file_list = []
     for idx, file_df in enumerate(selected_dfs):
         x_values, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db, input_settings, output_settings)
         if y_values is not None:
             y_values = apply_units(y_values, output_settings)
-
+            file_list.append(selected_files[idx].split("/")[-1])
             fig.add_trace(go.Scatter(x=x_values, y=y_values, mode='lines', name=f'{selected_files[idx].split("/")[-1]}'))#, showlegend=False))
             if output_settings.show_peaks:
                 # Mark the highest peaks with red markers
@@ -228,8 +228,13 @@ def plot_waves_single_tuple(selected_dfs, selected_files, freq, db, input_settin
 
                 # Mark the relevant troughs with blue markers
                 fig.add_trace(go.Scatter(x=x_values[relevant_troughs], y=y_values[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs'))#, showlegend=False))
-
-    figtitle = f'{selected_files[idx].split("/")[-1]}, Freq = {freq}, db = {db}' if input_settings.level else f'{selected_files[idx].split("/")[-1]}, Freq = {freq}, db = {input_settings.calibration_levels[(file_df.name, freq)] - int(db)}'
+    if len(file_list) == 0:
+        st.write("No files selected or no data available for the specified frequency and dB.")
+        return
+    elif len(file_list) == 1:
+        figtitle = f'{file_list[0]}, Freq = {freq}, db = {db}' if input_settings.level else f'{file_list[0]}, Freq = {freq}, db = {input_settings.calibration_levels[(file_df.name, freq)] - int(db)}'
+    else:
+        figtitle = f'{file_list[0]} and {len(file_list) - 1} more, Freq = {freq}, db = {db}' if input_settings.level else f'{file_list[0]} and {len(file_list) - 1} more, Freq = {freq}, db = {input_settings.calibration_levels[(file_df.name, freq)] - int(db)}'
     fig = style_layout(fig,
                        figtitle,
                        output_settings)
