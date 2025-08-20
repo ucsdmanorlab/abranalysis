@@ -28,30 +28,6 @@ warnings.filterwarnings('ignore')
 
 # Co-authored by: Abhijeeth Erra and Jeffrey Chen
 
-def createSettings_DC():
-    input_settings = InputSettings(
-        time_scale=time_scale,
-        level=level,
-        units=units,
-        calibration_levels=calibration_levels,
-        multiply_y_factor=multiply_y_factor
-    )
-    output_settings = OutputSettings(
-        return_units=return_units,
-        smooth_on=smooth_on,
-        all_peaks=all_peaks,
-        serif_font=serif_font,
-        show_peaks=show_peaks,
-        show_legend=show_legend,
-        plot_time_warped=plot_time_warped,
-        auto_y=auto_y,
-        y_min=y_min,
-        y_max=y_max,
-        vert_space=vert_space,
-    )
-    return input_settings, output_settings
-
-
 def check_settings_and_clear_cache():
     calc_settings = {
         'time_scale': st.session_state.get('time_scale', 10.0),
@@ -72,8 +48,8 @@ def check_settings_and_clear_cache():
     
     st.session_state.previous_calc_settings = calc_settings
 
-def plot_waves_single_dB(selected_dfs, selected_files, db, y_min, y_max, input_settings, output_settings, plot_time_warped=False):
-    db_column = 'Level(dB)' if input_settings.level else 'PostAtten(dB)'
+def plot_waves_single_dB(selected_dfs, selected_files, db, plot_time_warped=False, show_peaks=True):
+    db_column = db_column_name()
     if len(selected_dfs) == 0:
         st.write("No files selected.")
         return
@@ -92,10 +68,10 @@ def plot_waves_single_dB(selected_dfs, selected_files, db, y_min, y_max, input_s
         original_waves = []
 
         for i, freq in enumerate(sorted(freqs)):
-            x_values, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db, input_settings, output_settings)
+            x_values, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db)
 
             if y_values is not None:
-                y_values = apply_units(y_values, output_settings)
+                y_values = apply_units(y_values)
                 
                 if plot_time_warped:
                     original_waves.append(y_values.tolist())
@@ -130,15 +106,15 @@ def plot_waves_single_dB(selected_dfs, selected_files, db, y_min, y_max, input_s
                 pass
 
         fig = style_layout(fig,
-                           f'{selected_files[idx].split("/")[-1]} - {db} dB',
-                           output_settings)                           
+                           f'{selected_files[idx].split("/")[-1]} - {db} dB'
+                           )                           
         fig_list.append(fig)
         #except Exception as e:
         #        st.write(f"Error processing freq {freq}: for file {selected_files[idx]} {e}")
     return fig_list
 
-def plot_waves_single_frequency(selected_dfs, selected_files, freq, y_min, y_max, input_settings, output_settings, plot_time_warped=False):
-    db_column = 'Level(dB)' if input_settings.level else 'PostAtten(dB)'
+def plot_waves_single_frequency(selected_dfs, selected_files, freq, plot_time_warped=False, show_peaks=True):
+    db_column = db_column_name()
 
     if len(selected_dfs) == 0:
         st.write("No files selected.")
@@ -159,35 +135,35 @@ def plot_waves_single_frequency(selected_dfs, selected_files, freq, y_min, y_max
         original_waves = []
 
         try:
-            threshold = np.abs(calculate_hearing_threshold(file_df, freq, input_settings))
+            threshold = np.abs(calculate_hearing_threshold(file_df, freq))
         except Exception as e:
             threshold = None
          
         for i, db in enumerate(sorted(db_levels)):
-            x_values, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db, input_settings, output_settings)
+            x_values, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db)
             
             if y_values is not None:
-                y_values = apply_units(y_values, output_settings)
-                if output_settings.plot_time_warped:
+                y_values = apply_units(y_values)
+                if plot_time_warped:
                     original_waves.append(y_values.tolist())
                     continue
 
                 color = 'black' if db == threshold else glasbey_colors[i]
                 width = 5 if db == threshold else 2
-                name = f'{int(db)} dB' if db_column == 'Level(dB)' else f'{input_settings.calibration_levels[(file_df.name, freq)] - int(db)} dB'
+                name = f'{int(db_value(file_df.name, freq, db))} dB' 
                 if db == threshold:
                     name = 'Threshold: ' + name
                 
                 fig.add_trace(go.Scatter(x=x_values, y=y_values, mode='lines', name=name, line=dict(color=color, width=width)))
 
-                if output_settings.show_peaks:
+                if show_peaks:
                     # Mark the highest peaks with red markers
                     fig.add_trace(go.Scatter(x=x_values[highest_peaks], y=y_values[highest_peaks], mode='markers', marker=dict(color='red'), name='Peaks', showlegend=show_legend))
 
                     # Mark the relevant troughs with blue markers
                     fig.add_trace(go.Scatter(x=x_values[relevant_troughs], y=y_values[relevant_troughs], mode='markers', marker=dict(color='blue'), name='Troughs', showlegend=show_legend))
 
-        if output_settings.plot_time_warped:
+        if plot_time_warped:
             original_waves_array = np.array([wave[:-1] for wave in original_waves])
             try:
                 time = np.linspace(0, time_scale, original_waves_array.shape[1])
@@ -197,7 +173,7 @@ def plot_waves_single_frequency(selected_dfs, selected_files, freq, y_min, y_max
                 for i, db in enumerate(db_levels):
                     color = 'black' if db == threshold else glasbey_colors[i]
                     width = 5 if db == threshold else 2
-                    name = f'{int(db)} dB' if db_column == 'Level(dB)' else f'{input_settings.calibration_levels[(file_df.name, freq)] - int(db)} dB'
+                    name = f'{int(db_value(file_df.name, freq, db))} dB'
                     if db == threshold:
                         name = 'Threshold: ' + name
                     fig.add_trace(go.Scatter(x=np.linspace(0, time_scale, len(warped_waves_array[i])), y=warped_waves_array[i], mode='lines', name=name, line=dict(color=color, width=width)))
@@ -205,23 +181,23 @@ def plot_waves_single_frequency(selected_dfs, selected_files, freq, y_min, y_max
                 pass
         
         fig = style_layout(fig,
-                           f'{selected_files[idx].split("/")[-1]} - Frequency: {freq} Hz',
-                           output_settings)
+                           f'{selected_files[idx].split("/")[-1]} - Frequency: {freq} Hz'
+                           )
         fig_list.append(fig)
         #except Exception as e:
         #        st.write(f"Error processing freq {freq}: for file {selected_files[idx]} {e}")
     return fig_list
 
-def plot_waves_single_tuple(selected_dfs, selected_files, freq, db, input_settings, output_settings):
+def plot_waves_single_tuple(selected_dfs, selected_files, freq, db, show_peaks=True):
     fig = go.Figure()
     file_list = []
     for idx, file_df in enumerate(selected_dfs):
-        x_values, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db, input_settings, output_settings)
+        x_values, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db)
         if y_values is not None:
-            y_values = apply_units(y_values, output_settings)
+            y_values = apply_units(y_values)
             file_list.append(selected_files[idx].split("/")[-1])
             fig.add_trace(go.Scatter(x=x_values, y=y_values, mode='lines', name=f'{selected_files[idx].split("/")[-1]}'))#, showlegend=False))
-            if output_settings.show_peaks:
+            if show_peaks:
                 # Mark the highest peaks with red markers
                 fig.add_trace(go.Scatter(x=x_values[highest_peaks], y=y_values[highest_peaks], mode='markers', marker=dict(color='red'), name='Peaks'))#, showlegend=False))
 
@@ -230,17 +206,19 @@ def plot_waves_single_tuple(selected_dfs, selected_files, freq, db, input_settin
     if len(file_list) == 0:
         st.write("No files selected or no data available for the specified frequency and dB.")
         return
-    elif len(file_list) == 1:
-        figtitle = f'{file_list[0]}, Freq = {freq}, db = {db}' if input_settings.level else f'{file_list[0]}, Freq = {freq}, db = {input_settings.calibration_levels[(file_df.name, freq)] - int(db)}'
+    atten = st.session_state.get('atten', False)
+    db_str = f'{db}' if not atten else f'{st.session_state.calibration_levels[(file_df.name, freq)] - int(db)}'
+    if len(file_list) == 1:
+        figtitle = f'{file_list[0]}, Freq = {freq}, db = {db_str}' 
     else:
-        figtitle = f'{file_list[0]} and {len(file_list) - 1} more, Freq = {freq}, db = {db}' if input_settings.level else f'{file_list[0]} and {len(file_list) - 1} more, Freq = {freq}, db = {input_settings.calibration_levels[(file_df.name, freq)] - int(db)}'
+        figtitle = f'{file_list[0]} and {len(file_list) - 1} more, Freq = {freq}, db = {db_str}'
     fig = style_layout(fig,
-                       figtitle,
-                       output_settings)
+                       figtitle
+                       )
     return fig
 
-def plot_3d_surface(selected_dfs, selected_files, freq, input_settings=None, output_settings=None):
-    db_column = 'Level(dB)' if input_settings.level else 'PostAtten(dB)'
+def plot_3d_surface(selected_dfs, selected_files, freq):
+    db_column = db_column_name()
 
     if len(selected_dfs) == 0:
         st.write("No files selected.")
@@ -250,26 +228,21 @@ def plot_3d_surface(selected_dfs, selected_files, freq, input_settings=None, out
     for idx, file_df in enumerate(selected_dfs):
         fig = go.Figure()
         df_filtered = file_df[file_df['Freq(Hz)'] == freq]
-        if db_column == 'Level(dB)':
-            db_levels = sorted(df_filtered[db_column].unique(), reverse=True)
-        else:
-            db_levels = sorted([calibration_levels[(file_df.name, freq)] - db for db in df_filtered[db_column].unique()], reverse=True)
-        
+
+        db_levels = df_filtered[db_column].unique()
+        db_levels = sorted([db_value(file_df.name, freq, db) for db in db_levels], reverse=True)
         original_waves = []
 
         try:
-            threshold = calculate_hearing_threshold(file_df, freq, input_settings)
+            threshold = calculate_hearing_threshold(file_df, freq)
         except:
             threshold = None
 
         for db in db_levels:
-            if db_column == 'Level(dB)':
-                x_values, y_values, _, _ = calculate_and_plot_wave(file_df, freq, db, input_settings, output_settings)
-            else:
-                x_values, y_values, _, _ = calculate_and_plot_wave(file_df, freq, calibration_levels[(file_df.name, freq)] - db, input_settings, output_settings)
-
+            x_values, y_values, _, _ = calculate_and_plot_wave(file_df, freq, db_value(file_df.name, freq, db))
+            
             if y_values is not None:
-                y_values = apply_units(y_values, output_settings)
+                y_values = apply_units(y_values)
                 original_waves.append(y_values.tolist())
 
         original_waves_array = np.array([wave[:-1] for wave in original_waves])
@@ -300,20 +273,20 @@ def plot_3d_surface(selected_dfs, selected_files, freq, input_settings=None, out
         )
 
         fig.update_layout(scene_camera=camera)
-        fig.update_layout(font_family="Times New Roman" if output_settings.serif_font else "sans-serif",
+        fig.update_layout(font_family="Times New Roman" if st.session_state.serif_font else "sans-serif",
                       font_color="black",
-                      title_font_family="Times New Roman" if output_settings.serif_font else "sans-serif",
+                      title_font_family="Times New Roman" if st.session_state.serif_font else "sans-serif",
                       font=dict(size=14))
         fig.update_layout(showlegend=show_legend)
         fig_list.append(fig)
     return fig_list
 
-def plot_waves_stacked(selected_dfs, selected_files, freq, stacked_labels=None, input_settings=None, output_settings=None):
+def plot_waves_stacked(selected_dfs, selected_files, freq, stacked_labels=None):
     if len(selected_dfs) == 0:
         st.write("No files selected.")
         return
-
-    db_column = 'Level(dB)' if level else 'PostAtten(dB)'
+    atten = st.session_state.get('atten', False)
+    db_column = db_column_name()
 
     fig_list = []
     for idx, file_df in enumerate(selected_dfs):
@@ -324,10 +297,10 @@ def plot_waves_stacked(selected_dfs, selected_files, freq, stacked_labels=None, 
         # Get unique dB levels and color palette
         df_filtered = file_df[file_df['Freq(Hz)'] == freq]
         unique_dbs = sorted(df_filtered[db_column].unique())
-        if not level:
+        if atten:
             unique_dbs = sorted(unique_dbs, reverse=True)
         num_dbs = len(unique_dbs)
-        vertical_spacing = output_settings.vert_space / num_dbs
+        vertical_spacing = st.session_state.vert_space / num_dbs
         # Get y_min from input_settings if available, else default to 0.0
         # y_min = input_settings.y_min if input_settings and 'y_min' in input_settings else 0.0
         db_offsets = {db: i * vertical_spacing for i, db in enumerate(unique_dbs)}
@@ -335,15 +308,18 @@ def plot_waves_stacked(selected_dfs, selected_files, freq, stacked_labels=None, 
 
         # Calculate the hearing threshold
         try:
-            threshold = calculate_hearing_threshold(file_df, freq, input_settings)
+            threshold = calculate_hearing_threshold(file_df, freq)
         except:
             threshold = None
 
         db_levels = sorted(unique_dbs, reverse=True) if db_column == 'Level(dB)' else sorted(unique_dbs)
         if db_column == 'PostAtten(dB)':
             db_levels = np.array(db_levels)
-            calibration_level = np.full(len(db_levels), input_settings.calibration_levels[(file_df.name, freq)])
+            calibration_level = np.full(len(db_levels), st.session_state.calibration_levels[(file_df.name, freq)])
             db_levels = calibration_level - db_levels
+
+        # db_levels = sorted([db_value(file_df.name, freq, db) for db in unique_dbs], reverse=True)
+        
         max_db = db_levels[0]
 
         for i, db in enumerate(db_levels):
@@ -359,13 +335,13 @@ def plot_waves_stacked(selected_dfs, selected_files, freq, stacked_labels=None, 
                     final = file_df.loc[index, '0':].dropna()
                     final = pd.to_numeric(final, errors='coerce')
                     final = interpolate_and_smooth(final)
-                    final *= input_settings.multiply_y_factor
+                    final *= st.session_state.multiply_y_factor
 
                     # if units == 'Nanovolts':
                     #     final /= 1000
 
                     # Normalize the waveform
-                    if (db_column == 'Level(dB)' and db == max_db) or (db_column == 'PostAtten(dB)' and db == max_db):
+                    if (db == max_db):
                         max_value = np.max(np.abs(final))
                     final_normalized = final / max_value
 
@@ -393,13 +369,13 @@ def plot_waves_stacked(selected_dfs, selected_files, freq, stacked_labels=None, 
                                                 #showlegend=True
                                                 ))
                         
-                    y_pos = db_offsets[db] if input_settings.level else db_offsets[calibration_level[0] - db]
+                    y_pos = db_offsets[db] if not atten else db_offsets[calibration_level[0] - db]
                     if stacked_labels=="Left outside":
                         x_pos = 0; 
                     elif stacked_labels=="Right outside":
                         x_pos = time_scale*1.1; 
                     elif stacked_labels=="Right inside":
-                        x_pos = input_settings.time_scale; y_pos = y_pos + vert_space/num_dbs/3 #y_values.iloc[-1]
+                        x_pos = st.session_state.time_scale; y_pos = y_pos + st.session_state.vert_space/num_dbs/3 #y_values.iloc[-1]
                     else:
                         continue
                     
@@ -436,7 +412,6 @@ def plot_waves_stacked(selected_dfs, selected_files, freq, stacked_labels=None, 
         #     )
         fig = style_layout(fig,
                            f'{selected_files[idx].split("/")[-1]} - Frequency: {freq} Hz',
-                           output_settings,
         )
         fig.update_layout(width=400, height=700,
                           yaxis_title='Voltage (μV)',
@@ -448,7 +423,7 @@ def plot_waves_stacked(selected_dfs, selected_files, freq, stacked_labels=None, 
             fig_list.append(fig)
     return fig_list
 
-def all_thresholds(selected_dfs, selected_files, distinct_freqs, input_settings=None):
+def all_thresholds(selected_dfs, selected_files, distinct_freqs):
     df_dict = {'Filename': [],
                'Frequency': [],
                'Threshold': []}
@@ -460,7 +435,7 @@ def all_thresholds(selected_dfs, selected_files, distinct_freqs, input_settings=
             # if df_filtered.empty:
             #     continue
             try:
-                thresh = calculate_hearing_threshold(file_df, hz, input_settings)
+                thresh = calculate_hearing_threshold(file_df, hz)
             except:
                 thresh = np.nan
                 pass
@@ -474,10 +449,7 @@ def all_thresholds(selected_dfs, selected_files, distinct_freqs, input_settings=
 
 
 def calculate_unsupervised_threshold(df, freq): # UNUSED
-    if level:
-        db_column = 'Level(dB)'
-    else:
-        db_column = 'PostAtten(dB)'
+    db_column = db_column_name()
 
     if len(selected_dfs) == 0:
         st.write("No files selected.")
@@ -533,51 +505,45 @@ def calculate_unsupervised_threshold(df, freq): # UNUSED
 
     return min_threshold
 
-def plot_io_curve(selected_dfs, selected_files, freqs, db_levels, input_settings=None, output_settings=None):
-    db_column = 'Level(dB)' if input_settings.level else 'PostAtten(dB)'
+def db_column_name():
+    atten = st.session_state.get('atten', False)
+    return 'Level(dB)' if not atten else 'PostAtten(dB)'
+
+def db_value(file_name, freq, db):
+    atten = st.session_state.get('atten', False)
+    if atten:
+        return st.session_state.calibration_levels[(file_name, freq)] - int(db)
+    else:
+        return db
+
+def plot_io_curve(selected_dfs, selected_files, freqs, db_levels):
+    db_column = db_column_name()
 
     amplitudes = {}
 
     ru = 'μV'
-    if output_settings.return_units == 'Nanovolts':
+    if st.session_state.return_units == 'Nanovolts':
         ru = 'nV'
 
     fig_list = []
+
     for file_df, file_name in zip(selected_dfs, selected_files):
         for freq in freqs:
-            for db in db_levels:
-                _, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db, input_settings, output_settings)
+            db_levels_cal = [db_value(file_df.name, freq, db) for db in db_levels]
+            for i, db in enumerate(db_levels):
+                _, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db)
 
                 if highest_peaks is not None:
                     if highest_peaks.size > 0:  # Check if highest_peaks is not empty
-                        y_values = apply_units(y_values, output_settings)
+                        y_values = apply_units(y_values)
                         first_peak_amplitude = y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]
-                        if level:
-                            amplitudes[db] = first_peak_amplitude
-                        else:
-                            amplitudes[input_settings.calibration_levels[(file_df.name, freq)] - int(db)] = first_peak_amplitude
-
+                        amplitudes[db_levels_cal[i]] = first_peak_amplitude
+                        
             # Plotting
             fig = go.Figure()
-            if level:
-                x_vals = sorted(list(amplitudes.keys()))
-                y_vals = [amplitudes[x] for x in x_vals]  # Get values in same order as x_vals
-                fig.add_trace(go.Scatter(x=x_vals, y=y_vals, mode='lines+markers', name=f'Freq: {freq} Hz'))
-            
-                # fig.add_trace(go.Scatter(x=sorted(list(amplitudes.keys())), y=list(amplitudes.values()), mode='lines+markers', name=f'Freq: {freq} Hz'))
-            else:
-                sorted_db_levels = sorted(db_levels)
-                x_vals = []
-                y_vals = []
-                for db in sorted_db_levels:
-                    calibrated_db = input_settings.calibration_levels[(file_df.name, freq)] - int(db)
-                    if calibrated_db in amplitudes:
-                        x_vals.append(calibrated_db)
-                        y_vals.append(amplitudes[calibrated_db])
-                
-                fig.add_trace(go.Scatter(x=x_vals, y=y_vals, mode='lines+markers', name=f'Freq: {freq} Hz'))
-            
-                # fig.add_trace(go.Scatter(x=np.full(len(db_levels), input_settings.calibration_levels[(file_df.name, freq)]) - db_levels, y=amplitudes, mode='lines+markers', name=f'Freq: {freq} Hz'))
+            x_vals = sorted(list(amplitudes.keys()))
+            y_vals = [amplitudes[x] for x in x_vals]  # Get values in same order as x_vals
+            fig.add_trace(go.Scatter(x=x_vals, y=y_vals, mode='lines+markers', name=f'Freq: {freq} Hz'))
             
             file_name = file_name.split('/')[-1]
             fig.update_layout(
@@ -588,9 +554,9 @@ def plot_io_curve(selected_dfs, selected_files, freqs, db_levels, input_settings
                 yaxis=dict(range=[0, max(amplitudes.values()) + 0.1 * abs(max(amplitudes.values()))]),
                 template='plotly_white'
             )
-            fig.update_layout(font_family="Times New Roman" if serif_font else "sans-serif",
+            fig.update_layout(font_family="Times New Roman" if st.session_state.serif_font else "sans-serif",
                             font_color="black",
-                            title_font_family="Times New Roman" if serif_font else "sans-serif",
+                            title_font_family="Times New Roman" if st.session_state.serif_font else "sans-serif",
                             font=dict(size=24))
 
             fig_list.append(fig)
@@ -619,7 +585,7 @@ def main():
     # baseline_level = float(baseline_level_str)
     is_click = inputs.radio("Tone or click? (for .arf files)", ("Tone", "Click"), horizontal=True)
     click = True if is_click == "Click" else False
-    is_atten = inputs.toggle("dB saved as attenuation (.arf only)", value=False)
+    is_atten = inputs.toggle("dB saved as attenuation (.arf only)", value=False, key="atten")
 
     if uploaded_files:
 
@@ -638,11 +604,11 @@ def main():
         calibration_levels = st.session_state.calibration_levels
 
         level = (not is_atten)
-        db_column = 'Level(dB)' if level else 'PostAtten(dB)'
+        db_column = db_column_name()
 
         if dfs:
             distinct_freqs = sorted(pd.concat([df['Freq(Hz)'] for df in dfs]).unique())
-            distinct_dbs = sorted(pd.concat([df['Level(dB)'] if level else df['PostAtten(dB)'] for df in dfs]).unique())
+            distinct_dbs = sorted(pd.concat([df[db_column_name()] for df in dfs]).unique())
         else:
             distinct_freqs, distinct_dbs = [], []
 
@@ -674,19 +640,19 @@ def main():
         else:
             ymin = -5.0
             ymax = 5.0
-        auto_y = outputs.toggle("Auto Y-axis scaling", value=True)
-        y_min = outputs.number_input("Y-axis minimum", value=ymin, disabled=auto_y)
-        y_max = outputs.number_input("Y-axis maximum", value=ymax, disabled=auto_y)
-        plot_time_warped = outputs.toggle("Plot time warped curves", False)
-        show_legend = outputs.toggle("Show legend", True)
+        auto_y = outputs.toggle("Auto Y-axis scaling", value=True, key="auto_y")
+        y_min = outputs.number_input("Y-axis minimum", value=ymin, disabled=auto_y, key="y_min")
+        y_max = outputs.number_input("Y-axis maximum", value=ymax, disabled=auto_y, key="y_max")
+        plot_time_warped = outputs.toggle("Plot time warped curves", False, key="plot_time_warped")
+        show_legend = outputs.toggle("Show legend", True, key="show_legend")
         show_peaks = outputs.toggle("Show peaks (single wave and single frequency plots)", True)
-        serif_font = outputs.toggle("Use serif fonts in plots", value=False)
+        serif_font = outputs.toggle("Use serif fonts in plots", value=False, key="serif_font")
 
         advanced_settings = tab2.expander("Advanced settings", expanded=False)
         multiply_y_factor = advanced_settings.number_input("Multiply Y values by factor", value=1.0, key="multiply_y_factor")
-        vert_space = advanced_settings.number_input("Vertical space (for stacked curves)", value=10.0, min_value=0.0, step=1.0)
+        vert_space = advanced_settings.number_input("Vertical space (for stacked curves)", value=10.0, min_value=0.0, step=1.0, key="vert_space")
         stacked_labels = advanced_settings.selectbox("Stacked labels position", options=["Left outside", "Right outside", "Right inside", "Off"], index=2)
-        all_peaks = advanced_settings.toggle("Output all peaks and troughs (experimental)", value=False)
+        all_peaks = advanced_settings.toggle("Output all peaks and troughs (experimental)", value=False, key="all_peaks")
         smooth_on = advanced_settings.toggle("Smooth wave", value=True, key="smooth_on")
         
         check_settings_and_clear_cache()
@@ -695,7 +661,7 @@ def main():
         allowed_freqs = sorted(pd.concat([df['Freq(Hz)'] for df in selected_dfs]).unique())
         freq = tab2.selectbox("Select frequency (Hz)", options=allowed_freqs, index=0)
         # dB Level dropdown options, default to last (highest) dB)
-        allowed_dbs = sorted(pd.concat([df[df['Freq(Hz)']==freq]['Level(dB)'] if level else df[df['Freq(Hz)']==freq]['PostAtten(dB)'] for df in selected_dfs]).unique())
+        allowed_dbs = sorted(pd.concat([df[df['Freq(Hz)']==freq][db_column_name()] for df in selected_dfs]).unique())
         db = tab2.selectbox("Select sound level (dB)" if level else "Select sound level (attenuation, dB)", 
                             options=allowed_dbs, 
                             index=len(allowed_dbs)-1 if len(allowed_dbs) > 0 and level else 0)
@@ -706,11 +672,10 @@ def main():
         freq_str = freq if type(freq) == str else str(freq/1000) + " kHz"
         db_str = str(int(db)) + " dB"
         if tab2.button("Single wave ("+freq_str+", "+db_str+")", use_container_width=True):
-            input_settings, output_settings = createSettings_DC()
-            fig = plot_waves_single_tuple(selected_dfs, selected_files,freq, db, input_settings=input_settings, output_settings=output_settings)
+            fig = plot_waves_single_tuple(selected_dfs, selected_files,freq, db, show_peaks=show_peaks)
             st.plotly_chart(fig)
             
-            metrics_table = display_metrics_table_all_db(selected_dfs, selected_files, [freq], [db], input_settings, output_settings)
+            metrics_table = display_metrics_table_all_db(selected_dfs, selected_files, [freq], [db])
             
             st.dataframe(metrics_table, hide_index=True, use_container_width=True)
             # Create an in-memory buffer
@@ -729,9 +694,7 @@ def main():
         
         freqbuttons1, freqbuttons2 = tab2.columns([1, 1.5])
         if freqbuttons1.button("Single frequency", use_container_width=True):
-            input_settings, output_settings = createSettings_DC()
-
-            fig_list = plot_waves_single_frequency(selected_dfs, selected_files, freq, y_min, y_max, input_settings=input_settings, output_settings=output_settings, plot_time_warped=plot_time_warped)
+            fig_list = plot_waves_single_frequency(selected_dfs, selected_files, freq, plot_time_warped=plot_time_warped, show_peaks=show_peaks)
 
             for i in range(len(fig_list)):
                 st.plotly_chart(fig_list[i])
@@ -749,15 +712,13 @@ def main():
                     mime="application/pdf",
                     key=f'file{i}'
                 )
-            metrics_table = display_metrics_table_all_db(selected_dfs, selected_files, [freq], distinct_dbs, input_settings, output_settings)
+            metrics_table = display_metrics_table_all_db(selected_dfs, selected_files, [freq], distinct_dbs)
 
             st.dataframe(metrics_table, hide_index=True, use_container_width=True)
 
         
         if freqbuttons2.button('Single frequency, stacked', use_container_width=True):
-            input_settings, output_settings = createSettings_DC()
-
-            fig_list = plot_waves_stacked(selected_dfs, selected_files, freq, stacked_labels=stacked_labels, input_settings=input_settings, output_settings=output_settings)
+            fig_list = plot_waves_stacked(selected_dfs, selected_files, freq, stacked_labels=stacked_labels)
             for i in range(len(fig_list)):
                 st.plotly_chart(fig_list[i])
             
@@ -776,9 +737,7 @@ def main():
                 )
         
         if tab2.button("Single dB", use_container_width=True):
-            input_settings, output_settings = createSettings_DC()
-
-            fig_list = plot_waves_single_dB(selected_dfs, selected_files, db, y_min, y_max, input_settings=input_settings, output_settings=output_settings, plot_time_warped=plot_time_warped)
+            fig_list = plot_waves_single_dB(selected_dfs, selected_files, db, plot_time_warped=plot_time_warped, show_peaks=show_peaks)
 
             for i in range(len(fig_list)):
                 st.plotly_chart(fig_list[i])
@@ -800,9 +759,7 @@ def main():
             # need to add table functionality
 
         if tab2.button("3D surface", use_container_width=True):
-            input_settings, output_settings = createSettings_DC()
-
-            fig_list = plot_3d_surface(selected_dfs, selected_files, freq, input_settings=input_settings, output_settings=output_settings)
+            fig_list = plot_3d_surface(selected_dfs, selected_files, freq)
             for i in range(len(fig_list)):
                 st.plotly_chart(fig_list[i])
             
@@ -825,9 +782,8 @@ def main():
             # if io_all_freqs:
             #     fig_list = plot_io_curve(df, distinct_freqs, distinct_dbs)
             # else:
-            input_settings, output_settings = createSettings_DC()
 
-            fig_list = plot_io_curve(selected_dfs, selected_files, [freq], distinct_dbs, input_settings=input_settings, output_settings=output_settings)
+            fig_list = plot_io_curve(selected_dfs, selected_files, [freq], distinct_dbs)
             
             for i in range(len(fig_list)):
                 st.plotly_chart(fig_list[i])
@@ -848,13 +804,11 @@ def main():
 
         tab2.header("Data outputs:")
         if tab2.button("Return all thresholds", use_container_width=True):
-            input_settings, _ = createSettings_DC()
 
-            all_thresholds(selected_dfs, selected_files, distinct_freqs, input_settings=input_settings)
+            all_thresholds(selected_dfs, selected_files, distinct_freqs)
         
         if tab2.button("Return all peak analyses", use_container_width=True):
-            input_settings, output_settings = createSettings_DC()
-            metrics_table = display_metrics_table_all_db(selected_dfs, selected_files, distinct_freqs, distinct_dbs, input_settings, output_settings)
+            metrics_table = display_metrics_table_all_db(selected_dfs, selected_files, distinct_freqs, distinct_dbs)
             st.dataframe(metrics_table, hide_index=True, use_container_width=True)
 
         #st.markdown(get_download_link(fig), unsafe_allow_html=True)
