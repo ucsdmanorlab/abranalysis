@@ -22,8 +22,7 @@ warnings.filterwarnings('ignore')
 
 # TODO: use session states so plots don't disappear when downloading files
 # TODO: consider converting freqs to kHz throughout for readability
-# TODO: correct units 
-# TODO: fix IO curve bug for multiple tsv files
+# TODO: correct units
 # TODO: make 3D plots work for tsv files
 
 # Co-authored by: Abhijeeth Erra and Jeffrey Chen
@@ -517,7 +516,6 @@ def db_value(file_name, freq, db):
         return db
 
 def plot_io_curve(selected_dfs, selected_files, freqs, db_levels):
-    db_column = db_column_name()
 
     amplitudes = {}
 
@@ -529,11 +527,16 @@ def plot_io_curve(selected_dfs, selected_files, freqs, db_levels):
 
     for file_df, file_name in zip(selected_dfs, selected_files):
         for freq in freqs:
+            # check if freq, file pair exists:
+            if freq not in file_df['Freq(Hz)'].unique():
+                st.write(f"Frequency {freq} not found in file {file_name.split('/')[-1]}")
+                continue
             db_levels_cal = [db_value(file_df.name, freq, db) for db in db_levels]
             for i, db in enumerate(db_levels):
                 _, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db)
-
-                if highest_peaks is not None:
+                if highest_peaks is None:
+                    continue
+                else:
                     if highest_peaks.size > 0:  # Check if highest_peaks is not empty
                         y_values = apply_units(y_values)
                         first_peak_amplitude = y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]
