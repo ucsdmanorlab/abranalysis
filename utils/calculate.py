@@ -138,8 +138,28 @@ def calculate_hearing_threshold(df, freq):
 
     return lowest_db
 
-def display_metrics_table_all_db(selected_dfs, selected_files, freqs, db_levels):
-    metrics_data = {'File Name': [], 'Frequency (Hz)': [], 'dB Level': [],}
+def display_threshold_table(selected_dfs, selected_files, freqs):
+    metrics_data = {'File Name': [], 'Frequency (Hz)': [], 'Estimated Threshold': []}
+    
+    for file_df, file_name in zip(selected_dfs, selected_files):
+        for freq in freqs:
+            if len(file_df[file_df['Freq(Hz)'] == freq]) == 0:
+                continue
+            try:
+                threshold = calculate_hearing_threshold(file_df, freq)                
+            except:
+                threshold = np.nan
+                pass
+            
+            metrics_data['File Name'].append(file_name.split("/")[-1])
+            metrics_data['Frequency (Hz)'].append(freq)
+            metrics_data['Estimated Threshold'].append(threshold)
+    
+    metrics_table = pd.DataFrame(metrics_data)
+    return metrics_table
+
+def display_peaks_table(selected_dfs, selected_files, freqs, db_levels):
+    metrics_data = {'File Name': [], 'Frequency (Hz)': [], 'Sound amplitude (dB SPL)': [],} 
     atten = st.session_state.get('atten', False)
     db_column = 'Level(dB)' if not atten else 'PostAtten(dB)'
     if atten:
@@ -150,7 +170,7 @@ def display_metrics_table_all_db(selected_dfs, selected_files, freqs, db_levels)
         ru = 'nV'
 
     metrics_data = {**metrics_data, f'Wave I amplitude (P1-T1) ({ru})': [], 'Latency to First Peak (ms)': [],
-                    'Amplitude Ratio (Peak1/Peak4)': [], 'Estimated Threshold': []}
+                    'Amplitude Ratio (Peak1/Peak4)': []}
     if st.session_state.all_peaks:
         metrics_data = {**metrics_data,
                         f'Peak 1 ({ru})': [], 'Peak 1 latency (ms)': [], f'Trough 1 ({ru})': [], 'Trough 1 latency (ms)': [],
@@ -162,14 +182,9 @@ def display_metrics_table_all_db(selected_dfs, selected_files, freqs, db_levels)
 
     for file_df, file_name in zip(selected_dfs, selected_files):
         for freq in freqs:
-            try:
-                threshold = calculate_hearing_threshold(file_df, freq)
-                #multiply_y_factor=multiply_y_factor, level=level, time_scale=time_scale, units=return_units, calibration_levels=calibration_levels)
-                
-            except:
-                threshold = np.nan
-                pass
-
+            if len(file_df[file_df['Freq(Hz)'] == freq]) == 0:
+                continue
+            
             for db in db_levels:
                 _, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db)
                 if y_values is None:
@@ -191,15 +206,99 @@ def display_metrics_table_all_db(selected_dfs, selected_files, freqs, db_levels)
                         metrics_data['File Name'].append(file_name.split("/")[-1])
                         metrics_data['Frequency (Hz)'].append(freq)
                         if db_column == 'Level(dB)':
-                            metrics_data['dB Level'].append(db)
+                            metrics_data['Sound amplitude (dB SPL)'].append(db)
                         else:
-                            metrics_data['dB Level'].append(st.session_state.calibration_levels[(file_df.name, freq)] - db)
+                            metrics_data['Sound amplitude (dB SPL)'].append(st.session_state.calibration_levels[(file_df.name, freq)] - db)
                             metrics_data['Attenuation (dB)'].append(db)
                             metrics_data['Calibration Level (dB)'].append(st.session_state.calibration_levels[(file_df.name, freq)])
+                    
                         metrics_data[f'Wave I amplitude (P1-T1) ({ru})'].append(first_peak_amplitude)
                         metrics_data['Latency to First Peak (ms)'].append(latency_to_first_peak)
                         metrics_data['Amplitude Ratio (Peak1/Peak4)'].append(amplitude_ratio)
+
+                        if st.session_state.all_peaks:
+                            for pk_n in range(1, 6):  # Get up to 5 peaks for metrics
+                                peak = highest_peaks[pk_n - 1] if pk_n <= len(highest_peaks) else np.nan
+                                trough = relevant_troughs[pk_n - 1] if pk_n <= len(relevant_troughs) else np.nan
+                                metrics_data[f'Peak {pk_n} ({ru})'].append(y_values[peak] if not np.isnan(peak) else np.nan)
+                                metrics_data[f'Peak {pk_n} latency (ms)'].append(peak * (st.session_state.time_scale / len(y_values)))
+                                metrics_data[f'Trough {pk_n} ({ru})'].append(y_values[trough] if not np.isnan(trough) else np.nan)
+                                metrics_data[f'Trough {pk_n} latency (ms)'].append(trough * (st.session_state.time_scale / len(y_values)))
+
+    metrics_table = pd.DataFrame(metrics_data)
+    return metrics_table
+
+def display_metrics_table_all_db(selected_dfs, selected_files, freqs, db_levels):
+    output_pks = False if db_levels is None else True
+
+    metrics_data = {'File Name': [], 'Frequency (Hz)': [], 'Sound amplitude (dB SPL)': [],} if output_pks else {'File Name': []}
+    atten = st.session_state.get('atten', False)
+    db_column = 'Level(dB)' if not atten else 'PostAtten(dB)'
+    if atten:
+        metrics_data = {**metrics_data, 'Attenuation (dB)':[], 'Calibration Level (dB)': []}
+
+    ru = 'μV'
+    if st.session_state.return_units == 'Nanovolts':
+        ru = 'nV'
+
+    metrics_data = {**metrics_data, 'Estimated Threshold': []}
+    if output_pks:
+        metrics_data = {**metrics_data, f'Wave I amplitude (P1-T1) ({ru})': [], 'Latency to First Peak (ms)': [],
+                        'Amplitude Ratio (Peak1/Peak4)': []}
+        if st.session_state.all_peaks:
+            metrics_data = {**metrics_data,
+                            f'Peak 1 ({ru})': [], 'Peak 1 latency (ms)': [], f'Trough 1 ({ru})': [], 'Trough 1 latency (ms)': [],
+                            f'Peak 2 ({ru})': [], 'Peak 2 latency (ms)': [], f'Trough 2 ({ru})': [], 'Trough 2 latency (ms)': [],
+                            f'Peak 3 ({ru})': [], 'Peak 3 latency (ms)': [], f'Trough 3 ({ru})': [], 'Trough 3 latency (ms)': [],
+                            f'Peak 4 ({ru})': [], 'Peak 4 latency (ms)': [], f'Trough 4 ({ru})': [], 'Trough 4 latency (ms)': [],
+                            f'Peak 5 ({ru})': [], 'Peak 5 latency (ms)': [], f'Trough 5 ({ru})': [], 'Trough 5 latency (ms)': [],
+                            }
+
+    for file_df, file_name in zip(selected_dfs, selected_files):
+        for freq in freqs:
+            if len(file_df[file_df['Freq(Hz)'] == freq]) == 0:
+                continue
+            try:
+                threshold = calculate_hearing_threshold(file_df, freq)                
+            except:
+                threshold = np.nan
+                pass
+            
+            if not output_pks:
+                metrics_data['File Name'].append(file_name.split("/")[-1])
+                metrics_data['Estimated Threshold'].append(threshold)
+                continue
+            for db in db_levels:
+                _, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db)
+                if y_values is None:
+                    continue
+                if st.session_state.return_units == 'Nanovolts':
+                    y_values *= 1000
+
+                if highest_peaks is not None:
+                    if highest_peaks.size > 0:  # Check if highest_peaks is not empty
+                        first_peak_amplitude = y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]
+                        latency_to_first_peak = highest_peaks[0] * (st.session_state.time_scale / len(y_values))
+
+                        if len(highest_peaks) >= 4 and len(relevant_troughs) >= 4:
+                            amplitude_ratio = (y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]) / (
+                                        y_values[highest_peaks[3]] - y_values[relevant_troughs[3]])
+                        else:
+                            amplitude_ratio = np.nan
+
+                        metrics_data['File Name'].append(file_name.split("/")[-1])
                         metrics_data['Estimated Threshold'].append(threshold)
+                        metrics_data['Frequency (Hz)'].append(freq)
+                        if db_column == 'Level(dB)':
+                            metrics_data['Sound amplitude (dB SPL)'].append(db)
+                        else:
+                            metrics_data['Sound amplitude (dB SPL)'].append(st.session_state.calibration_levels[(file_df.name, freq)] - db)
+                            metrics_data['Attenuation (dB)'].append(db)
+                            metrics_data['Calibration Level (dB)'].append(st.session_state.calibration_levels[(file_df.name, freq)])
+                    
+                        metrics_data[f'Wave I amplitude (P1-T1) ({ru})'].append(first_peak_amplitude)
+                        metrics_data['Latency to First Peak (ms)'].append(latency_to_first_peak)
+                        metrics_data['Amplitude Ratio (Peak1/Peak4)'].append(amplitude_ratio)
 
                         if st.session_state.all_peaks:
                             for pk_n in range(1, 6):  # Get up to 5 peaks for metrics

@@ -13,7 +13,7 @@ import streamlit as st
 
 from kneed import KneeLocator
 from sklearn.neighbors import NearestNeighbors
-from utils.calculate import interpolate_and_smooth, calculate_and_plot_wave, display_metrics_table_all_db, calculate_hearing_threshold
+from utils.calculate import *
 from utils.plotting import apply_units, style_layout
 from utils.processFiles import get_selected_data, process_uploaded_files_cached
 import warnings
@@ -23,6 +23,7 @@ warnings.filterwarnings('ignore')
 # TODO: consider converting freqs to kHz throughout for readability
 # TODO: correct units
 # TODO: make 3D plots work for tsv files
+# TODO: check timescale of tsvs in training data...
 
 # Co-authored by: Abhijeeth Erra and Jeffrey Chen
 
@@ -693,13 +694,14 @@ def main():
             fig_list = plot_waves_single_frequency(selected_dfs, selected_files, freq, plot_time_warped=plot_time_warped, show_peaks=show_peaks)
             st.session_state['current_plots'] = fig_list
             st.session_state['current_plot_filenames'] = [f.split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+".pdf" for f in selected_files]
-            st.session_state['current_table'] =  display_metrics_table_all_db(selected_dfs, selected_files, [freq], distinct_dbs)
+            st.session_state['current_table'] =  [display_threshold_table(selected_dfs, selected_files, [freq]), 
+                                                  display_peaks_table(selected_dfs, selected_files, [freq], distinct_dbs)]
 
         if freqbuttons2.button('Single frequency, stacked', use_container_width=True):
             fig_list = plot_waves_stacked(selected_dfs, selected_files, freq, stacked_labels=stacked_labels)
             st.session_state['current_plots'] = fig_list
             st.session_state['current_plot_filenames'] = [f.split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+"_stacked.pdf" for f in selected_files]
-            st.session_state['current_table'] =  None
+            st.session_state['current_table'] =  display_threshold_table(selected_dfs, selected_files, [freq])
         
         if tab2.button("Single dB SPL", use_container_width=True):
             fig_list = plot_waves_single_dB(selected_dfs, selected_files, db, plot_time_warped=plot_time_warped, show_peaks=show_peaks)
@@ -753,9 +755,13 @@ def main():
                     mime="application/pdf",
                     key=f'plot_download_{i}'
                 )
-        if st.session_state['current_table'] is not None:
+        if 'current_table' in st.session_state and st.session_state['current_table'] is not None:
             metrics_table = st.session_state['current_table']
-            st.dataframe(metrics_table, hide_index=True, use_container_width=True)
+            if isinstance(metrics_table, list):
+                for table in metrics_table:
+                    st.data_editor(table, hide_index=True, use_container_width=True)
+            else:
+                st.dataframe(metrics_table, hide_index=True, use_container_width=True)
 
 
     else:
