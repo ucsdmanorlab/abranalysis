@@ -53,9 +53,10 @@ def plot_waves_single_dB(selected_dfs, selected_files, db, plot_time_warped=Fals
         return
     
     fig_list = []
+    not_found_list = [] 
     for idx, file_df in enumerate(selected_dfs):
         if db not in file_df[db_column].unique():
-            st.write(f"dB {db} not found in file {selected_files[idx].split('/')[-1]}")
+            not_found_list.append(selected_files[idx].split('/')[-1])
             continue
         fig = go.Figure()
         df_filtered = file_df[file_df[db_column] == db]
@@ -79,7 +80,7 @@ def plot_waves_single_dB(selected_dfs, selected_files, db, plot_time_warped=Fals
                 width = 2
                 name = freq if type(freq)==str else f'{int(freq)} Hz'
                 
-                fig.add_trace(go.Scatter(x=x_values, y=y_values, mode='lines', name=name, line=dict(color=color, width=width)))
+                fig.add_trace(go.Scatter(x=x_values, y=y_values, mode='lines', name=name, line=dict(color=color, width=width), showlegend=st.session_state.show_legend))
                 
                 if show_peaks:
                     # Mark the highest peaks with red markers
@@ -99,7 +100,7 @@ def plot_waves_single_dB(selected_dfs, selected_files, db, plot_time_warped=Fals
                     color = glasbey_colors[i]
                     width = 2
                     name = freq if type(freq)==str else f'{int(freq)} Hz'
-                    fig.add_trace(go.Scatter(x=np.linspace(0, st.session_state.time_scale, len(warped_waves_array[i])), y=warped_waves_array[i], mode='lines', name=name, line=dict(color=color, width=width)))
+                    fig.add_trace(go.Scatter(x=np.linspace(0, st.session_state.time_scale, len(warped_waves_array[i])), y=warped_waves_array[i], mode='lines', name=name, line=dict(color=color, width=width), showlegend=st.session_state.show_legend))
             except IndexError:
                 pass
 
@@ -109,6 +110,8 @@ def plot_waves_single_dB(selected_dfs, selected_files, db, plot_time_warped=Fals
         fig_list.append(fig)
         #except Exception as e:
         #        st.write(f"Error processing freq {freq}: for file {selected_files[idx]} {e}")
+    if len(not_found_list) > 0:
+        st.write(f"{db} dB not found in files: {', '.join(not_found_list)}")
     return fig_list
 
 def plot_waves_single_frequency(selected_dfs, selected_files, freq, plot_time_warped=False, show_peaks=True):
@@ -119,10 +122,11 @@ def plot_waves_single_frequency(selected_dfs, selected_files, freq, plot_time_wa
         return
     
     fig_list = []
+    not_found_list = []
     for idx, file_df in enumerate(selected_dfs):
         # check if frequency exists in df:
         if freq not in file_df['Freq(Hz)'].unique():
-            st.write(f"Frequency {freq} not found in file {selected_files[idx].split('/')[-1]}")
+            not_found_list.append(selected_files[idx].split('/')[-1])
             continue
         #try:
         fig = go.Figure()
@@ -184,6 +188,8 @@ def plot_waves_single_frequency(selected_dfs, selected_files, freq, plot_time_wa
         fig_list.append(fig)
         #except Exception as e:
         #        st.write(f"Error processing freq {freq}: for file {selected_files[idx]} {e}")
+    if len(not_found_list) > 0:
+        st.write(f"Frequency {freq} not found in files: {', '.join(not_found_list)}")
     return fig_list
 
 def plot_waves_single_tuple(selected_dfs, selected_files, freq, db, show_peaks=True):
@@ -284,10 +290,11 @@ def plot_waves_stacked(selected_dfs, selected_files, freq, stacked_labels=None):
     db_column = db_column_name()
 
     fig_list = []
+    not_found_list = []
     for idx, file_df in enumerate(selected_dfs):
         fig = go.Figure()
         if freq not in file_df['Freq(Hz)'].unique():
-            st.write(f"Frequency {freq} not found in file {selected_files[idx].split('/')[-1]}")
+            not_found_list.append(selected_files[idx].split('/')[-1])
             continue
         # Get unique dB levels and color palette
         df_filtered = file_df[file_df['Freq(Hz)'] == freq]
@@ -416,13 +423,19 @@ def plot_waves_stacked(selected_dfs, selected_files, freq, stacked_labels=None):
         khz = file_df[(file_df['Freq(Hz)'] == freq)]
         if not khz.empty:
             fig_list.append(fig)
+    if len(not_found_list) > 0:
+        st.write(f"Frequency {freq} not found in files: {', '.join(not_found_list)}")
     return fig_list
 
 def all_thresholds(selected_dfs, selected_files, distinct_freqs):
+    progress_bar = st.progress(0)
+    status_text = st.empty()
     df_dict = {'Filename': [],
                'Frequency': [],
                'Threshold': []}
     for (file_df, file_name) in zip(selected_dfs, selected_files):
+        status_text.text(f"{file_name.split('/')[-1]}")
+        progress_bar.progress((selected_files.index(file_name) + 1) / len(selected_files))
         for hz in distinct_freqs:
             if hz not in file_df['Freq(Hz)'].unique():
                 continue
@@ -438,7 +451,8 @@ def all_thresholds(selected_dfs, selected_files, distinct_freqs):
             df_dict['Frequency'].append(hz)
             df_dict['Threshold'].append(thresh)
     threshold_table = pd.DataFrame(df_dict)
-    st.dataframe(threshold_table, hide_index=True, use_container_width=True)
+    progress_bar.empty()
+    status_text.empty()
     return threshold_table
 
 
@@ -522,6 +536,8 @@ def plot_io_curve(selected_dfs, selected_files, freqs, db_levels):
     fig_list = []
 
     for file_df, file_name in zip(selected_dfs, selected_files):
+        fig = go.Figure()
+        include_fig = False
         for freq in freqs:
             # check if freq, file pair exists:
             if freq not in file_df['Freq(Hz)'].unique():
@@ -532,20 +548,21 @@ def plot_io_curve(selected_dfs, selected_files, freqs, db_levels):
                 if highest_peaks is None:
                     continue
                 else:
-                    if highest_peaks.size > 0:  # Check if highest_peaks is not empty
+                    if highest_peaks.size > 0: 
+                        include_fig = True
                         y_values = apply_units(y_values)
                         first_peak_amplitude = y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]
                         amplitudes[db_levels_cal[i]] = first_peak_amplitude
                         
-            # Plotting
-            fig = go.Figure()
-            x_vals = sorted(list(amplitudes.keys()))
-            y_vals = [amplitudes[x] for x in x_vals]  # Get values in same order as x_vals
-            fig.add_trace(go.Scatter(x=x_vals, y=y_vals, mode='lines+markers', name=f'Freq: {freq} Hz'))
-            
+            if include_fig:
+                x_vals = sorted(list(amplitudes.keys()))
+                y_vals = [amplitudes[x] for x in x_vals]  # Get values in same order as x_vals
+                fig.add_trace(go.Scatter(x=x_vals, y=y_vals, mode='lines+markers', name=f'Freq: {freq} Hz', showlegend=st.session_state.show_legend))
+        if include_fig:  
             file_name = file_name.split('/')[-1]
+            freq_str = f'{freq} Hz' if len(freqs) == 1 else "all frequencies"
             fig.update_layout(
-                title=f'{file_name} I/O Curve for Frequency {freq} Hz',
+                title=f'{file_name} I/O Curve for {freq_str}',
                 xaxis_title='dB SPL',
                 yaxis_title=f'Wave 1 Amplitude ({ru})',
                 xaxis=dict(tickmode='linear', dtick=5),
@@ -667,166 +684,79 @@ def main():
         db_str = str(int(db)) + " dB"
         if tab2.button("Single wave ("+freq_str+", "+db_str+")", use_container_width=True):
             fig = plot_waves_single_tuple(selected_dfs, selected_files,freq, db, show_peaks=show_peaks)
-            st.plotly_chart(fig)
-            
-            metrics_table = display_metrics_table_all_db(selected_dfs, selected_files, [freq], [db])
-            
-            st.dataframe(metrics_table, hide_index=True, use_container_width=True)
-            # Create an in-memory buffer
-            buffer = io.BytesIO()
-
-            # Save the figure as a pdf to the buffer
-            fig.write_image(file=buffer, format="pdf")
-
-            # Download the pdf from the buffer
-            st.download_button(
-                label="Download plot as PDF",
-                data=buffer,
-                file_name=(selected_files[0].split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+ "_"+db_str.replace(' ','')+".pdf") if len(selected_files)==1 else "all_files_" +freq_str.replace(' ','')+ "_"+db_str.replace(' ','')+".pdf",
-                mime="application/pdf",
-            )
+            st.session_state['current_plots'] = [fig]
+            st.session_state['current_plot_filenames'] = [(selected_files[0].split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+ "_"+db_str.replace(' ','')+".pdf") if len(selected_files)==1 else "all_files_" +freq_str.replace(' ','')+ "_"+db_str.replace(' ','')+".pdf"]
+            st.session_state['current_table'] =  display_metrics_table_all_db(selected_dfs, selected_files, [freq], [db])
         
         freqbuttons1, freqbuttons2 = tab2.columns([1, 1.5])
         if freqbuttons1.button("Single frequency", use_container_width=True):
             fig_list = plot_waves_single_frequency(selected_dfs, selected_files, freq, plot_time_warped=plot_time_warped, show_peaks=show_peaks)
+            st.session_state['current_plots'] = fig_list
+            st.session_state['current_plot_filenames'] = [f.split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+".pdf" for f in selected_files]
+            st.session_state['current_table'] =  display_metrics_table_all_db(selected_dfs, selected_files, [freq], distinct_dbs)
 
-            for i in range(len(fig_list)):
-                st.plotly_chart(fig_list[i])
-            
-                buffer = io.BytesIO()
-
-                # Save the figure as a pdf to the buffer
-                fig_list[i].write_image(file=buffer, format="pdf")
-
-                # Download the pdf from the buffer
-                st.download_button(
-                    label="Download plot as PDF",
-                    data=buffer,
-                    file_name=selected_files[i].split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+".pdf",
-                    mime="application/pdf",
-                    key=f'file{i}'
-                )
-            metrics_table = display_metrics_table_all_db(selected_dfs, selected_files, [freq], distinct_dbs)
-
-            st.dataframe(metrics_table, hide_index=True, use_container_width=True)
-
-        
         if freqbuttons2.button('Single frequency, stacked', use_container_width=True):
             fig_list = plot_waves_stacked(selected_dfs, selected_files, freq, stacked_labels=stacked_labels)
-            for i in range(len(fig_list)):
-                st.plotly_chart(fig_list[i])
-            
-                buffer = io.BytesIO()
-
-                # Save the figure as a pdf to the buffer
-                fig_list[i].write_image(file=buffer, format="pdf")
-                
-                # Download the pdf from the buffer
-                st.download_button(
-                    label="Download plot as PDF",
-                    data=buffer,
-                    file_name=selected_files[i].split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+ "_stacked.pdf",
-                    mime="application/pdf",
-                    key=f'file{i}'
-                )
+            st.session_state['current_plots'] = fig_list
+            st.session_state['current_plot_filenames'] = [f.split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+"_stacked.pdf" for f in selected_files]
+            st.session_state['current_table'] =  None
         
         if tab2.button("Single dB SPL", use_container_width=True):
             fig_list = plot_waves_single_dB(selected_dfs, selected_files, db, plot_time_warped=plot_time_warped, show_peaks=show_peaks)
-
-            for i in range(len(fig_list)):
-                st.plotly_chart(fig_list[i])
-            
-                buffer = io.BytesIO()
-
-                # Save the figure as a pdf to the buffer
-                fig_list[i].write_image(file=buffer, format="pdf")
-
-                # Download the pdf from the buffer
-                st.download_button(
-                    label="Download plot as PDF",
-                    data=buffer,
-                    file_name=selected_files[i].split("/")[-1].split('.')[0] + "_" + str(int(db))+"dB.pdf",
-                    mime="application/pdf",
-                    key=f'file{i}'
-                )
-            # display_metrics_table_all_db(selected_dfs, [freq], distinct_dbs, time_scale)
-            # need to add table functionality
+            st.session_state['current_plots'] = fig_list
+            st.session_state['current_plot_filenames'] = [f.split("/")[-1].split('.')[0] + "_" + str(int(db)) + "dB.pdf" for f in selected_files]
+            st.session_state['current_table'] =  None
 
         if tab2.button("3D surface", use_container_width=True):
             fig_list = plot_3d_surface(selected_dfs, selected_files, freq)
-            for i in range(len(fig_list)):
-                st.plotly_chart(fig_list[i])
-            
-                buffer = io.BytesIO()
+            st.session_state['current_plots'] = fig_list
+            st.session_state['current_plot_filenames'] = [f.split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+ "_3Dplot.pdf" for f in selected_files]
+            st.session_state['current_table'] =  None
 
-                # Save the figure as a pdf to the buffer
-                fig_list[i].write_image(file=buffer, format="pdf")
-
-                # Download the pdf from the buffer
-                st.download_button(
-                    label="Download plot as PDF",
-                    data=buffer,
-                    file_name=selected_files[i].split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+ "_3Dplot.pdf",
-                    mime="application/pdf",
-                    key=f'file{i}'
-                )
-
-        #io_all_freqs = st.sidebar.toggle("All frequencies", value=False)
         iobuttons1, iobuttons2 = tab2.columns([1, 1.5])
         if iobuttons1.button("I/O curve", use_container_width=True):
-            # if io_all_freqs:
-            #     fig_list = plot_io_curve(df, distinct_freqs, distinct_dbs)
-            # else:
-
             fig_list = plot_io_curve(selected_dfs, selected_files, [freq], distinct_dbs)
-            
-            for i in range(len(fig_list)):
-                st.plotly_chart(fig_list[i])
-            
-                buffer = io.BytesIO()
+            st.session_state['current_plots'] = fig_list
+            st.session_state['current_plot_filenames'] = [f.split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+ "_IO_plot.pdf" for f in selected_files]
+            st.session_state['current_table'] =  None
 
-                # Save the figure as a pdf to the buffer
-                fig_list[i].write_image(file=buffer, format="pdf")
-
-                # Download the pdf from the buffer
-                st.download_button(
-                    label="Download plot as PDF",
-                    data=buffer,
-                    file_name=selected_files[i].split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+"IO_plot.pdf",
-                    mime="application/pdf",
-                    key=f'file{i}'
-                )
         if iobuttons2.button("All I/O curves", use_container_width=True):
-  
             fig_list = plot_io_curve(selected_dfs, selected_files, distinct_freqs, distinct_dbs)
-            
-            for i in range(len(fig_list)):
-                st.plotly_chart(fig_list[i])
-            
-                buffer = io.BytesIO()
-
-                # Save the figure as a pdf to the buffer
-                fig_list[i].write_image(file=buffer, format="pdf")
-
-                # Download the pdf from the buffer
-                st.download_button(
-                    label="Download plot as PDF",
-                    data=buffer,
-                    file_name=selected_files[i].split("/")[-1].split('.')[0] + "_" + str(distinct_freqs[i]).replace(' ','')+"IO_plot.pdf",
-                    mime="application/pdf",
-                    key=f'file{i}'
-                )
+            st.session_state['current_plots'] = fig_list
+            st.session_state['current_plot_filenames'] = [f.split("/")[-1].split('.')[0] + "_IO_plot.pdf" for f in selected_files]
+            st.session_state['current_table'] =  None  
 
         tab2.header("Data outputs:")
         if tab2.button("Return all thresholds", use_container_width=True):
-
-            all_thresholds(selected_dfs, selected_files, distinct_freqs)
+            threshold_table = all_thresholds(selected_dfs, selected_files, distinct_freqs)
+            st.session_state['current_plots'] = []
+            st.session_state['current_plot_filenames'] = []
+            st.session_state['current_table'] =  threshold_table
         
         if tab2.button("Return all peak analyses", use_container_width=True):
             metrics_table = display_metrics_table_all_db(selected_dfs, selected_files, distinct_freqs, distinct_dbs)
-            st.dataframe(metrics_table, hide_index=True, use_container_width=True)
+            st.session_state['current_plots'] = []
+            st.session_state['current_plot_filenames'] = []
+            st.session_state['current_table'] =  metrics_table
 
         #st.markdown(get_download_link(fig), unsafe_allow_html=True)
+        if 'current_plots' in st.session_state and st.session_state['current_plots']:
+            for i, fig in enumerate(st.session_state['current_plots']): # in range(len(fig_list)):
+                st.plotly_chart(fig)
+                buffer = io.BytesIO()
+                fig.write_image(file=buffer, format="pdf")
+
+                st.download_button(
+                    label="Download plot as PDF",
+                    data=buffer,
+                    file_name=st.session_state['current_plot_filenames'][i],
+                    mime="application/pdf",
+                    key=f'plot_download_{i}'
+                )
+        if st.session_state['current_table'] is not None:
+            metrics_table = st.session_state['current_table']
+            st.dataframe(metrics_table, hide_index=True, use_container_width=True)
+
 
     else:
         tab2.write("Please upload files to analyze in the 'Data' tab.")
