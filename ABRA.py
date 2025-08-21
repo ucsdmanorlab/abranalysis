@@ -19,13 +19,20 @@ from utils.processFiles import get_selected_data, process_uploaded_files_cached
 import warnings
 warnings.filterwarnings('ignore')
 
-# TODO: use session states so plots don't disappear when downloading files
 # TODO: consider converting freqs to kHz throughout for readability
 # TODO: correct units
 # TODO: make 3D plots work for tsv files
 # TODO: check timescale of tsvs in training data...
 
 # Co-authored by: Abhijeeth Erra and Jeffrey Chen
+
+def manual_threshold_warning():
+    if 'manual_thresholds' in st.session_state and st.session_state.manual_thresholds:
+        col1, col2 = st.columns([2, 1])
+        col1.warning("Manual thresholds are set.")
+        if col2.button("Clear manual thresholds"):
+            st.session_state.manual_thresholds.clear()
+            st.success("Manual thresholds cleared. Choose plot option to refresh.")
 
 def check_settings_and_clear_cache():
     calc_settings = {
@@ -44,6 +51,8 @@ def check_settings_and_clear_cache():
                 st.session_state.calculated_thresholds.clear()
             if 'calculated_waves' in st.session_state:
                 st.session_state.calculated_waves.clear()
+            if 'manual_thresholds' in st.session_state:
+                st.session_state.manual_thresholds.clear()
     
     st.session_state.previous_calc_settings = calc_settings
 
@@ -219,7 +228,7 @@ def plot_waves_single_tuple(selected_dfs, selected_files, freq, db, show_peaks=T
                        )
     return fig
 
-def plot_3d_surface(selected_dfs, selected_files, freq):
+def plot_3d_surface(selected_dfs, selected_files, freq, plot_time_warped=False):
     db_column = db_column_name()
 
     if len(selected_dfs) == 0:
@@ -248,14 +257,18 @@ def plot_3d_surface(selected_dfs, selected_files, freq):
                 original_waves.append(y_values.tolist())
 
         original_waves_array = np.array([wave[:-1] for wave in original_waves])
+        time = np.linspace(0, st.session_state.time_scale, original_waves_array.shape[1])
 
-        try:
-            time = np.linspace(0, st.session_state.time_scale, original_waves_array.shape[1])
-            obj = fs.fdawarp(original_waves_array.T, time)
-            obj.srsf_align(parallel=True)
-            warped_waves_array = obj.fn.T
-        except IndexError:
-            warped_waves_array = np.array([])
+        if plot_time_warped:    
+            try:
+                time = np.linspace(0, st.session_state.time_scale, original_waves_array.shape[1])
+                obj = fs.fdawarp(original_waves_array.T, time)
+                obj.srsf_align(parallel=True)
+                warped_waves_array = obj.fn.T
+            except IndexError:
+                warped_waves_array = np.array([])
+        else:
+            warped_waves_array = original_waves_array
 
         for i, (db, warped_waves) in enumerate(zip(db_levels, warped_waves_array)):
             fig.add_trace(go.Scatter3d(x=[db] * len(warped_waves), y=x_values, z=warped_waves, mode='lines', name=f'{int(db)} dB', line=dict(color='blue')))
@@ -688,32 +701,37 @@ def main():
             st.session_state['current_plots'] = [fig]
             st.session_state['current_plot_filenames'] = [(selected_files[0].split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+ "_"+db_str.replace(' ','')+".pdf") if len(selected_files)==1 else "all_files_" +freq_str.replace(' ','')+ "_"+db_str.replace(' ','')+".pdf"]
             st.session_state['current_table'] =  display_metrics_table_all_db(selected_dfs, selected_files, [freq], [db])
-        
+            st.session_state['threshold_table'], st.session_state['peaks_table'] = None, None
+
         freqbuttons1, freqbuttons2 = tab2.columns([1, 1.5])
         if freqbuttons1.button("Single frequency", use_container_width=True):
             fig_list = plot_waves_single_frequency(selected_dfs, selected_files, freq, plot_time_warped=plot_time_warped, show_peaks=show_peaks)
             st.session_state['current_plots'] = fig_list
             st.session_state['current_plot_filenames'] = [f.split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+".pdf" for f in selected_files]
-            st.session_state['current_table'] =  [display_threshold_table(selected_dfs, selected_files, [freq]), 
-                                                  display_peaks_table(selected_dfs, selected_files, [freq], distinct_dbs)]
+            st.session_state['current_table'] =  None
+            st.session_state['threshold_table'] = display_threshold_table(selected_dfs, selected_files, [freq])
+            st.session_state['peaks_table'] = display_peaks_table(selected_dfs, selected_files, [freq], distinct_dbs)
 
         if freqbuttons2.button('Single frequency, stacked', use_container_width=True):
             fig_list = plot_waves_stacked(selected_dfs, selected_files, freq, stacked_labels=stacked_labels)
             st.session_state['current_plots'] = fig_list
             st.session_state['current_plot_filenames'] = [f.split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+"_stacked.pdf" for f in selected_files]
             st.session_state['current_table'] =  display_threshold_table(selected_dfs, selected_files, [freq])
-        
+            st.session_state['threshold_table'], st.session_state['peaks_table'] = None, None
+            
         if tab2.button("Single dB SPL", use_container_width=True):
             fig_list = plot_waves_single_dB(selected_dfs, selected_files, db, plot_time_warped=plot_time_warped, show_peaks=show_peaks)
             st.session_state['current_plots'] = fig_list
             st.session_state['current_plot_filenames'] = [f.split("/")[-1].split('.')[0] + "_" + str(int(db)) + "dB.pdf" for f in selected_files]
             st.session_state['current_table'] =  None
-
+            st.session_state['threshold_table'], st.session_state['peaks_table'] = None, None
+            
         if tab2.button("3D surface", use_container_width=True):
-            fig_list = plot_3d_surface(selected_dfs, selected_files, freq)
+            fig_list = plot_3d_surface(selected_dfs, selected_files, freq, plot_time_warped=plot_time_warped)
             st.session_state['current_plots'] = fig_list
             st.session_state['current_plot_filenames'] = [f.split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+ "_3Dplot.pdf" for f in selected_files]
             st.session_state['current_table'] =  None
+            st.session_state['threshold_table'], st.session_state['peaks_table'] = None, None
 
         iobuttons1, iobuttons2 = tab2.columns([1, 1.5])
         if iobuttons1.button("I/O curve", use_container_width=True):
@@ -721,12 +739,14 @@ def main():
             st.session_state['current_plots'] = fig_list
             st.session_state['current_plot_filenames'] = [f.split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+ "_IO_plot.pdf" for f in selected_files]
             st.session_state['current_table'] =  None
+            st.session_state['threshold_table'], st.session_state['peaks_table'] = None, None
 
         if iobuttons2.button("All I/O curves", use_container_width=True):
             fig_list = plot_io_curve(selected_dfs, selected_files, distinct_freqs, distinct_dbs)
             st.session_state['current_plots'] = fig_list
             st.session_state['current_plot_filenames'] = [f.split("/")[-1].split('.')[0] + "_IO_plot.pdf" for f in selected_files]
             st.session_state['current_table'] =  None  
+            st.session_state['threshold_table'], st.session_state['peaks_table'] = None, None
 
         tab2.header("Data outputs:")
         if tab2.button("Return all thresholds", use_container_width=True):
@@ -734,12 +754,16 @@ def main():
             st.session_state['current_plots'] = []
             st.session_state['current_plot_filenames'] = []
             st.session_state['current_table'] =  threshold_table
+            st.session_state['threshold_table'], st.session_state['peaks_table'] = None, None
+            
         
         if tab2.button("Return all peak analyses", use_container_width=True):
             metrics_table = display_metrics_table_all_db(selected_dfs, selected_files, distinct_freqs, distinct_dbs)
             st.session_state['current_plots'] = []
             st.session_state['current_plot_filenames'] = []
             st.session_state['current_table'] =  metrics_table
+            st.session_state['threshold_table'], st.session_state['peaks_table'] = None, None
+            
 
         #st.markdown(get_download_link(fig), unsafe_allow_html=True)
         if 'current_plots' in st.session_state and st.session_state['current_plots']:
@@ -755,14 +779,32 @@ def main():
                     mime="application/pdf",
                     key=f'plot_download_{i}'
                 )
+        lock_cols = ["File Name", "Frequency (Hz)", 'Sound amplitude (dB SPL)', 'Attenuation (dB)', 'Calibration Level (dB)']
         if 'current_table' in st.session_state and st.session_state['current_table'] is not None:
             metrics_table = st.session_state['current_table']
-            if isinstance(metrics_table, list):
-                for table in metrics_table:
-                    st.data_editor(table, hide_index=True, use_container_width=True)
-            else:
-                st.dataframe(metrics_table, hide_index=True, use_container_width=True)
-
+            st.dataframe(metrics_table, hide_index=True, use_container_width=True)
+            manual_threshold_warning()
+            
+        if 'threshold_table' in st.session_state and st.session_state['threshold_table'] is not None:
+            threshold_table = st.session_state['threshold_table']
+            disable_columns = [col for col in threshold_table.columns if col in lock_cols]
+            edited_df = st.data_editor(threshold_table, hide_index=True, use_container_width=True, disabled=disable_columns)
+            if (edited_df != threshold_table).any().any():
+                if 'manual_thresholds' not in st.session_state:
+                    st.session_state.manual_thresholds = {}
+                diffs = edited_df.ne(threshold_table)
+                edited_positions = np.where(diffs)
+                for row_idx in edited_positions[0]:
+                    file_name = edited_df.iloc[row_idx]['File Name']
+                    freq = edited_df.iloc[row_idx]['Frequency (Hz)']
+                    threshold = edited_df.iloc[row_idx]['Estimated Threshold']
+                    edit_key = f"{file_name}_{freq}"
+                    st.session_state.manual_thresholds[edit_key] = threshold
+            manual_threshold_warning()
+        if 'peaks_table' in st.session_state and st.session_state['peaks_table'] is not None:
+            peaks_table = st.session_state['peaks_table']
+            disable_columns = [col for col in peaks_table.columns if col in lock_cols]
+            edited_peaks_df = st.data_editor(peaks_table, hide_index=True, use_container_width=True, disabled=disable_columns)
 
     else:
         tab2.write("Please upload files to analyze in the 'Data' tab.")

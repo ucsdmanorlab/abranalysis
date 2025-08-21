@@ -69,7 +69,12 @@ def calculate_hearing_threshold(df, freq):
 
     if 'calculated_thresholds' not in st.session_state:
         st.session_state.calculated_thresholds = {}
-
+    
+    if 'manual_thresholds' in st.session_state:
+        manual_cache_key = f"{file_name}_{freq}"
+        if manual_cache_key in st.session_state.manual_thresholds:
+            return st.session_state.manual_thresholds[manual_cache_key]
+    
     if cache_key in st.session_state.calculated_thresholds:
         return st.session_state.calculated_thresholds[cache_key]
     
@@ -150,7 +155,7 @@ def display_threshold_table(selected_dfs, selected_files, freqs):
             except:
                 threshold = np.nan
                 pass
-            
+            #print(file_name)
             metrics_data['File Name'].append(file_name.split("/")[-1])
             metrics_data['Frequency (Hz)'].append(freq)
             metrics_data['Estimated Threshold'].append(threshold)
