@@ -7,6 +7,7 @@ from scipy.signal import find_peaks
 from scipy.ndimage import gaussian_filter1d
 from .models import default_peak_finding_model, default_thresholding_model
 import streamlit as st
+from .ui import *
 
 def interpolate_and_smooth(y, target_length=244):
     x = np.linspace(0, 1, len(y))
@@ -144,10 +145,15 @@ def calculate_hearing_threshold(df, freq):
     return lowest_db
 
 def display_threshold_table(selected_dfs, selected_files, freqs):
+    progress_bar, status_text, count = initialize_progress_bar()
+
     metrics_data = {'File Name': [], 'Frequency (Hz)': [], 'Estimated Threshold': []}
     
     for file_df, file_name in zip(selected_dfs, selected_files):
         for freq in freqs:
+            count = update_progress_bar(
+                progress_bar, status_text, count, (len(selected_files) * len(freqs)), 
+                f"Calculating thresholds...{file_name.split('/')[-1]}, Frequency: {freq} Hz")
             if len(file_df[file_df['Freq(Hz)'] == freq]) == 0:
                 continue
             try:
@@ -161,9 +167,11 @@ def display_threshold_table(selected_dfs, selected_files, freqs):
             metrics_data['Estimated Threshold'].append(threshold)
     
     metrics_table = pd.DataFrame(metrics_data)
+    clear_status_bar(progress_bar, status_text)
     return metrics_table
 
 def display_peaks_table(selected_dfs, selected_files, freqs, db_levels):
+    progress_bar, status_text, count = initialize_progress_bar()
     metrics_data = {'File Name': [], 'Frequency (Hz)': [], 'Sound amplitude (dB SPL)': [],} 
     atten = st.session_state.get('atten', False)
     db_column = 'Level(dB)' if not atten else 'PostAtten(dB)'
@@ -189,6 +197,9 @@ def display_peaks_table(selected_dfs, selected_files, freqs, db_levels):
         for freq in freqs:
             if len(file_df[file_df['Freq(Hz)'] == freq]) == 0:
                 continue
+            count = update_progress_bar(
+                progress_bar, status_text, count, (len(selected_files) * len(freqs)), 
+                f"Calculating peaks...{file_name.split('/')[-1]}, Frequency: {freq} Hz")
             
             for db in db_levels:
                 _, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db)
@@ -231,6 +242,7 @@ def display_peaks_table(selected_dfs, selected_files, freqs, db_levels):
                                 metrics_data[f'Trough {pk_n} latency (ms)'].append(trough * (st.session_state.time_scale / len(y_values)))
 
     metrics_table = pd.DataFrame(metrics_data)
+    clear_status_bar(progress_bar, status_text)
     return metrics_table
 
 def display_metrics_table_all_db(selected_dfs, selected_files, freqs, db_levels):

@@ -4,6 +4,7 @@ import os
 import tempfile
 import numpy as np
 import struct
+from .ui import * 
 
 def CFTSread(PATH):
     with open(PATH, 'r', encoding='latin1') as file:
@@ -220,8 +221,9 @@ def process_uploaded_files_cached(uploaded_files, is_rz_file, click, is_atten):
 
     dfs = []
     duration = None
-
+    progress_bar, status_text, count = initialize_progress_bar()
     for file in uploaded_files:
+        count = update_progress_bar(progress_bar, status_text, count, len(uploaded_files), f"Reading {file.name}...")
         # Use tempfile
         temp_file_path = os.path.join(tempfile.gettempdir(), file.name)
         with open(temp_file_path, 'wb') as temp_file:
@@ -274,6 +276,7 @@ def process_uploaded_files_cached(uploaded_files, is_rz_file, click, is_atten):
     st.session_state.processed_dfs = dfs
     st.session_state.processed_duration = duration
     st.session_state.processed_data_cache_key = cache_key
+    clear_status_bar(progress_bar, status_text)
     
     return dfs, duration
 
