@@ -8,6 +8,7 @@ from scipy.ndimage import gaussian_filter1d
 from .models import default_peak_finding_model, default_thresholding_model
 import streamlit as st
 from .ui import *
+from .processFiles import db_value
 
 def interpolate_and_smooth(y, target_length=244):
     x = np.linspace(0, 1, len(y))
@@ -63,6 +64,20 @@ def peak_finding(wave, peak_finding_model):
                     break
     relevant_troughs = relevant_troughs.astype('i')
     return highest_smoothed_peaks, relevant_troughs
+
+def check_threshold(df, freq):
+    file_name = getattr(df, 'name', 'unknown_file')
+
+    if 'manual_thresholds' in st.session_state:
+        manual_cache_key = f"{file_name}_{freq}"
+        if manual_cache_key in st.session_state.manual_thresholds:
+            return st.session_state.manual_thresholds[manual_cache_key]
+        
+    cache_key = f"threshold_{file_name}_{freq}"
+    if 'calculated_thresholds' in st.session_state and cache_key in st.session_state.calculated_thresholds:
+        return st.session_state.calculated_thresholds[cache_key]
+    
+    return None
 
 def calculate_hearing_threshold(df, freq):
     file_name = getattr(df, 'name', 'unknown_file')
@@ -170,14 +185,15 @@ def display_threshold_table(selected_dfs, selected_files, freqs):
     clear_status_bar(progress_bar, status_text)
     return metrics_table
 
-def display_peaks_table(selected_dfs, selected_files, freqs, db_levels):
+def display_peaks_table(selected_dfs, selected_files, freqs, db_levels, return_threshold=False, return_nas=False):
     progress_bar, status_text, count = initialize_progress_bar()
     metrics_data = {'File Name': [], 'Frequency (Hz)': [], 'Sound amplitude (dB SPL)': [],} 
     atten = st.session_state.get('atten', False)
     db_column = 'Level(dB)' if not atten else 'PostAtten(dB)'
     if atten:
         metrics_data = {**metrics_data, 'Attenuation (dB)':[], 'Calibration Level (dB)': []}
-
+    if return_threshold:
+        metrics_data = {**metrics_data, 'Estimated Threshold': []}
     ru = 'μV'
     if st.session_state.return_units == 'Nanovolts':
         ru = 'nV'
@@ -201,49 +217,72 @@ def display_peaks_table(selected_dfs, selected_files, freqs, db_levels):
                 progress_bar, status_text, count, (len(selected_files) * len(freqs)), 
                 f"Calculating peaks...{file_name.split('/')[-1]}, Frequency: {freq} Hz")
             
+            threshold = None
+            if return_threshold:
+                try:
+                    threshold = np.abs(calculate_hearing_threshold(file_df, freq))
+                except Exception as e:
+                    pass
+
             for db in db_levels:
-                _, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db)
+                _, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db, return_peaks=True)
+
+                # _, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db)
                 if y_values is None:
                     continue
                 if st.session_state.return_units == 'Nanovolts':
                     y_values *= 1000
 
-                if highest_peaks is not None:
-                    if highest_peaks.size > 0:  # Check if highest_peaks is not empty
-                        first_peak_amplitude = y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]
-                        latency_to_first_peak = highest_peaks[0] * (st.session_state.time_scale / len(y_values))
+                metrics_data['File Name'].append(file_name.split("/")[-1])
+                metrics_data['Frequency (Hz)'].append(freq)
+                if db_column == 'Level(dB)':
+                    metrics_data['Sound amplitude (dB SPL)'].append(db)
+                else:
+                    metrics_data['Sound amplitude (dB SPL)'].append(st.session_state.calibration_levels[(file_df.name, freq)] - db)
+                    metrics_data['Attenuation (dB)'].append(db)
+                    metrics_data['Calibration Level (dB)'].append(st.session_state.calibration_levels[(file_df.name, freq)])
+                if return_threshold:
+                    metrics_data['Estimated Threshold'].append(threshold)
+                
+                if highest_peaks is not None and highest_peaks.size >0:
+                    first_peak_amplitude = y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]
+                    latency_to_first_peak = highest_peaks[0] * (st.session_state.time_scale / len(y_values))
 
-                        if len(highest_peaks) >= 4 and len(relevant_troughs) >= 4:
-                            amplitude_ratio = (y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]) / (
-                                        y_values[highest_peaks[3]] - y_values[relevant_troughs[3]])
-                        else:
-                            amplitude_ratio = np.nan
+                    if len(highest_peaks) >= 4 and len(relevant_troughs) >= 4:
+                        amplitude_ratio = (y_values[highest_peaks[0]] - y_values[relevant_troughs[0]]) / (
+                                    y_values[highest_peaks[3]] - y_values[relevant_troughs[3]])
+                    else:
+                        amplitude_ratio = np.nan
 
-                        metrics_data['File Name'].append(file_name.split("/")[-1])
-                        metrics_data['Frequency (Hz)'].append(freq)
-                        if db_column == 'Level(dB)':
-                            metrics_data['Sound amplitude (dB SPL)'].append(db)
-                        else:
-                            metrics_data['Sound amplitude (dB SPL)'].append(st.session_state.calibration_levels[(file_df.name, freq)] - db)
-                            metrics_data['Attenuation (dB)'].append(db)
-                            metrics_data['Calibration Level (dB)'].append(st.session_state.calibration_levels[(file_df.name, freq)])
-                    
-                        metrics_data[f'Wave I amplitude (P1-T1) ({ru})'].append(first_peak_amplitude)
-                        metrics_data['Latency to First Peak (ms)'].append(latency_to_first_peak)
-                        metrics_data['Amplitude Ratio (Peak1/Peak4)'].append(amplitude_ratio)
+                    metrics_data[f'Wave I amplitude (P1-T1) ({ru})'].append(first_peak_amplitude)
+                    metrics_data['Latency to First Peak (ms)'].append(latency_to_first_peak)
+                    metrics_data['Amplitude Ratio (Peak1/Peak4)'].append(amplitude_ratio)
 
-                        if st.session_state.all_peaks:
-                            for pk_n in range(1, 6):  # Get up to 5 peaks for metrics
-                                peak = highest_peaks[pk_n - 1] if pk_n <= len(highest_peaks) else np.nan
-                                trough = relevant_troughs[pk_n - 1] if pk_n <= len(relevant_troughs) else np.nan
-                                metrics_data[f'Peak {pk_n} ({ru})'].append(y_values[peak] if not np.isnan(peak) else np.nan)
-                                metrics_data[f'Peak {pk_n} latency (ms)'].append(peak * (st.session_state.time_scale / len(y_values)))
-                                metrics_data[f'Trough {pk_n} ({ru})'].append(y_values[trough] if not np.isnan(trough) else np.nan)
-                                metrics_data[f'Trough {pk_n} latency (ms)'].append(trough * (st.session_state.time_scale / len(y_values)))
-
+                    if st.session_state.all_peaks:
+                        for pk_n in range(1, 6):  # Get up to 5 peaks for metrics
+                            peak = highest_peaks[pk_n - 1] if pk_n <= len(highest_peaks) else np.nan
+                            trough = relevant_troughs[pk_n - 1] if pk_n <= len(relevant_troughs) else np.nan
+                            metrics_data[f'Peak {pk_n} ({ru})'].append(y_values[peak] if not np.isnan(peak) else np.nan)
+                            metrics_data[f'Peak {pk_n} latency (ms)'].append(peak * (st.session_state.time_scale / len(y_values)))
+                            metrics_data[f'Trough {pk_n} ({ru})'].append(y_values[trough] if not np.isnan(trough) else np.nan)
+                            metrics_data[f'Trough {pk_n} latency (ms)'].append(trough * (st.session_state.time_scale / len(y_values)))
+                else:
+                    metrics_data[f'Wave I amplitude (P1-T1) ({ru})'].append(np.nan)
+                    metrics_data['Latency to First Peak (ms)'].append(np.nan)
+                    metrics_data['Amplitude Ratio (Peak1/Peak4)'].append(np.nan)
+                    if st.session_state.all_peaks:
+                        for pk_n in range(1, 6):  
+                            metrics_data[f'Peak {pk_n} ({ru})'].append(np.nan)
+                            metrics_data[f'Peak {pk_n} latency (ms)'].append(np.nan)
+                            metrics_data[f'Trough {pk_n} ({ru})'].append(np.nan)
+                            metrics_data[f'Trough {pk_n} latency (ms)'].append(np.nan)
+                            
     metrics_table = pd.DataFrame(metrics_data)
     clear_status_bar(progress_bar, status_text)
-    return metrics_table
+    if return_nas:
+        return metrics_table
+    else:
+        return metrics_table.dropna()
 
 def display_metrics_table_all_db(selected_dfs, selected_files, freqs, db_levels):
     output_pks = False if db_levels is None else True
@@ -329,11 +368,11 @@ def display_metrics_table_all_db(selected_dfs, selected_files, freqs, db_levels)
     metrics_table = pd.DataFrame(metrics_data)
     return metrics_table
 
-def calculate_and_plot_wave(df, freq, db, peak_finding_model=default_peak_finding_model()):
+def calculate_and_plot_wave(df, freq, db, peak_finding_model=default_peak_finding_model(), return_peaks=True):
     file_name = getattr(df, 'name', 'unknown_file')
     smooth_on = st.session_state.get('smooth_on', True)
 
-    cache_key = f"wave_{file_name}_{freq}_{db}_{smooth_on}" 
+    cache_key = f"wave_{file_name}_{freq}_{db}_{smooth_on}_{return_peaks}" 
 
     if 'calculated_waves' not in st.session_state:
         st.session_state.calculated_waves = {}
@@ -341,15 +380,23 @@ def calculate_and_plot_wave(df, freq, db, peak_finding_model=default_peak_findin
     if cache_key in st.session_state.calculated_waves:
         return st.session_state.calculated_waves[cache_key]
 
+    threshold=None
+    try:
+        threshold = np.abs(calculate_hearing_threshold(df, freq))
+    except Exception as e:
+        pass
+         
+    calc_peaks = return_peaks and (threshold is None or st.session_state['peaks_below_thresh'] or db_value(df.name, freq, db) >= db_value(df.name, freq, threshold))
+       
     if smooth_on:
-        result = calculate_and_plot_wave_orig(df, freq, db, peak_finding_model)
+        result = calculate_and_plot_wave_orig(df, freq, db, peak_finding_model, return_peaks=calc_peaks)
     else:
-        result = calculate_and_plot_wave_exact(df, freq, db, peak_finding_model)
+        result = calculate_and_plot_wave_exact(df, freq, db, peak_finding_model, return_peaks=calc_peaks)
 
     st.session_state.calculated_waves[cache_key] = result
     return result
 
-def calculate_and_plot_wave_exact(df, freq, db, peak_finding_model=default_peak_finding_model(), 
+def calculate_and_plot_wave_exact(df, freq, db, peak_finding_model=default_peak_finding_model(), return_peaks=True,
                                   ):
     atten = st.session_state.get('atten', False)
 
@@ -368,6 +415,8 @@ def calculate_and_plot_wave_exact(df, freq, db, peak_finding_model=default_peak_
 
         orig_y *= st.session_state.multiply_y_factor
 
+        if not return_peaks:
+            return orig_x, orig_y, None, None
         # y_values for peak finding:
         tenms = int((10/st.session_state.time_scale)*len(orig_y)) if st.session_state.time_scale > 10 else len(orig_y)
         y_values_fpf = interpolate_and_smooth(orig_y[:tenms], 244)
@@ -397,8 +446,8 @@ def calculate_and_plot_wave_exact(df, freq, db, peak_finding_model=default_peak_
         return orig_x, orig_y, highest_peaks, relevant_troughs
     else:
         return None, None, None, None
-    
-def calculate_and_plot_wave_orig(df, freq, db, peak_finding_model=default_peak_finding_model()):
+
+def calculate_and_plot_wave_orig(df, freq, db, peak_finding_model=default_peak_finding_model(), return_peaks=True,):
     atten = st.session_state.get('atten', False)
     db_column = 'Level(dB)' if not atten else 'PostAtten(dB)'
     khz = df[(df['Freq(Hz)'] == freq) & (df[db_column] == db)]
@@ -419,7 +468,9 @@ def calculate_and_plot_wave_orig(df, freq, db, peak_finding_model=default_peak_f
             y_values /= 1000
 
         y_values *= st.session_state.multiply_y_factor
-
+        if not return_peaks:
+            return x_values, y_values, None, None
+        
         y_values_fpf = interpolate_and_smooth(y_values[:244])
 
         # Flatten the data to scale all values across the group
@@ -438,4 +489,5 @@ def calculate_and_plot_wave_orig(df, freq, db, peak_finding_model=default_peak_f
         highest_peaks, relevant_troughs = peak_finding(y_values_fpf, peak_finding_model)
 
         return x_values, y_values, highest_peaks, relevant_troughs
-    return None, None, None, None
+    else:
+        return None, None, None, None

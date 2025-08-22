@@ -7,7 +7,7 @@ import streamlit as st
 
 from utils.calculate import *
 from utils.plotting import *
-from utils.processFiles import get_selected_data, process_uploaded_files_cached
+from utils.processFiles import get_selected_data, process_uploaded_files_cached, db_column_name
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -40,7 +40,8 @@ def check_settings_and_clear_cache():
         'units': st.session_state.get('units', 'Microvolts'),
         'smooth_on': st.session_state.get('smooth_on', True),
         'return_units': st.session_state.get('return_units', 'Microvolts'),
-        'calibration_levels': dict(st.session_state.get('calibration_levels', {}))
+        'calibration_levels': dict(st.session_state.get('calibration_levels', {}),),
+        'peaks_below_thresh': st.session_state.get('peaks_below_thresh', False),
     }
     
     # Check if settings changed
@@ -56,19 +57,6 @@ def check_settings_and_clear_cache():
     
     st.session_state.previous_calc_settings = calc_settings
     clear_plots_and_tables()
-
-
-def db_column_name():
-    atten = st.session_state.get('atten', False)
-    return 'Level(dB)' if not atten else 'PostAtten(dB)'
-
-def db_value(file_name, freq, db):
-    atten = st.session_state.get('atten', False)
-    if atten:
-        return st.session_state.calibration_levels[(file_name, freq)] - int(db)
-    else:
-        return db
-
 
 def main():    
     if 'calibration_levels' not in st.session_state:
@@ -107,7 +95,6 @@ def main():
         selected_files, selected_dfs = get_selected_data()
 
         level = (not is_atten)
-        db_column = db_column_name()
 
         if dfs:
             distinct_freqs = sorted(pd.concat([df['Freq(Hz)'] for df in dfs]).unique())
@@ -157,27 +144,29 @@ def main():
         stacked_labels = advanced_settings.selectbox("Stacked labels position", options=["Left outside", "Right outside", "Right inside", "Off"], index=2)
         all_peaks = advanced_settings.toggle("Output all peaks and troughs (experimental)", value=False, key="all_peaks")
         smooth_on = advanced_settings.toggle("Smooth wave", value=True, key="smooth_on")
+        peaks_below_thresh = advanced_settings.toggle("Calculate peaks/troughs below threshold", value=False, key="peaks_below_thresh")
         #unfilter_pk1 = advanced_settings.toggle("Include sub-threshold peak 1 amplitudes", value=False, key="unfilter_pk1")
 
         check_settings_and_clear_cache()
 
         # Frequency dropdown options
-        allowed_freqs = sorted(pd.concat([df['Freq(Hz)'] for df in selected_dfs]).unique())
+        allowed_freqs = sorted(pd.concat([df['Freq(Hz)'] for df in selected_dfs]).unique()) if selected_dfs else []
         freq = tab2.selectbox("Select frequency (Hz)", options=allowed_freqs, index=0)
         # dB Level dropdown options, default to last (highest) dB)
-        allowed_dbs = sorted(pd.concat([df[df['Freq(Hz)']==freq][db_column_name()] for df in selected_dfs]).unique())
+        allowed_dbs = sorted(pd.concat([df[df['Freq(Hz)']==freq][db_column_name()] for df in selected_dfs]).unique()) if selected_dfs else []
         db = tab2.selectbox("Select sound level (dB)" if level else "Select sound level (attenuation, dB)", 
                             options=allowed_dbs, 
                             index=len(allowed_dbs)-1 if len(allowed_dbs) > 0 and level else 0)
         
         
-        tab2.header("Plot:")
         freq_str = freq if type(freq) == str else str(freq/1000) + " kHz"
         db_str = str(int(db)) + " dB"
+        tab2.header("Plot:")
         if tab2.button("Single wave ("+freq_str+", "+db_str+")", use_container_width=True):
+            clear_plots_and_tables()
             st.session_state['current_plots'] = [plot_waves_single_tuple(selected_dfs, selected_files,freq, db, show_peaks=show_peaks)]
             st.session_state['current_plot_filenames'] = [(selected_files[0].split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+ "_"+db_str.replace(' ','')+".pdf") if len(selected_files)==1 else "all_files_" +freq_str.replace(' ','')+ "_"+db_str.replace(' ','')+".pdf"]
-            st.session_state['current_table'] =  display_metrics_table_all_db(selected_dfs, selected_files, [freq], [db])
+            st.session_state['current_table'] =  display_peaks_table(selected_dfs, selected_files, [freq], [db], return_threshold=True, return_nas=True)
 
         freqbuttons1, freqbuttons2 = tab2.columns([1, 1.5])
         if freqbuttons1.button("Single frequency", use_container_width=True):
@@ -221,7 +210,8 @@ def main():
             
         if tab2.button("Return all peak analyses", use_container_width=True):
             clear_plots_and_tables()
-            st.session_state['current_table'] =  display_metrics_table_all_db(selected_dfs, selected_files, distinct_freqs, distinct_dbs)
+            st.session_state['current_table'] =  display_peaks_table(selected_dfs, selected_files, distinct_freqs, distinct_dbs, return_threshold=True)
+            # display_metrics_table_all_db(selected_dfs, selected_files, distinct_freqs, distinct_dbs)
 
         #st.markdown(get_download_link(fig), unsafe_allow_html=True)
         if 'current_plots' in st.session_state and st.session_state['current_plots']:

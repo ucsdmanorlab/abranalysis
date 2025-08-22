@@ -297,3 +297,15 @@ def get_selected_data():
             selected_dfs.append(df)
     
     return selected_files, selected_dfs
+
+def db_column_name():
+    atten = st.session_state.get('atten', False)
+    return 'Level(dB)' if not atten else 'PostAtten(dB)'
+
+def db_value(file_name, freq, db):
+    atten = st.session_state.get('atten', False)
+    if atten:
+        return st.session_state.calibration_levels[(file_name, freq)] - int(db)
+    else:
+        return db
+    
