@@ -140,7 +140,7 @@ def calculate_hearing_threshold(df, freq):
 
     if db_column == 'PostAtten(dB)':
         db_levels = np.array(db_levels)
-        calibration_level = np.full(len(db_levels), st.session_state.calibration_levels[(df.name, freq)])
+        calibration_level = np.full(len(db_levels), st.session_state.calibration_levels[freq])
         db_levels = calibration_level - db_levels
 
     lowest_db = db_levels[0]
@@ -238,9 +238,9 @@ def display_peaks_table(selected_dfs, selected_files, freqs, db_levels, return_t
                 if db_column == 'Level(dB)':
                     metrics_data['Sound amplitude (dB SPL)'].append(db)
                 else:
-                    metrics_data['Sound amplitude (dB SPL)'].append(st.session_state.calibration_levels[(file_df.name, freq)] - db)
+                    metrics_data['Sound amplitude (dB SPL)'].append(st.session_state.calibration_levels[freq] - db)
                     metrics_data['Attenuation (dB)'].append(db)
-                    metrics_data['Calibration Level (dB)'].append(st.session_state.calibration_levels[(file_df.name, freq)])
+                    metrics_data['Calibration Level (dB)'].append(st.session_state.calibration_levels[freq])
                 if return_threshold:
                     metrics_data['Estimated Threshold'].append(threshold)
                 
@@ -348,9 +348,9 @@ def display_metrics_table_all_db(selected_dfs, selected_files, freqs, db_levels)
                         if db_column == 'Level(dB)':
                             metrics_data['Sound amplitude (dB SPL)'].append(db)
                         else:
-                            metrics_data['Sound amplitude (dB SPL)'].append(st.session_state.calibration_levels[(file_df.name, freq)] - db)
+                            metrics_data['Sound amplitude (dB SPL)'].append(st.session_state.calibration_levels[freq] - db)
                             metrics_data['Attenuation (dB)'].append(db)
-                            metrics_data['Calibration Level (dB)'].append(st.session_state.calibration_levels[(file_df.name, freq)])
+                            metrics_data['Calibration Level (dB)'].append(st.session_state.calibration_levels[freq])
                     
                         metrics_data[f'Wave I amplitude (P1-T1) ({ru})'].append(first_peak_amplitude)
                         metrics_data['Latency to First Peak (ms)'].append(latency_to_first_peak)
@@ -385,9 +385,10 @@ def calculate_and_plot_wave(df, freq, db, peak_finding_model=default_peak_findin
         threshold = np.abs(calculate_hearing_threshold(df, freq))
     except Exception as e:
         pass
-         
-    calc_peaks = return_peaks and (threshold is None or st.session_state['peaks_below_thresh'] or db_value(df.name, freq, db) >= db_value(df.name, freq, threshold))
-       
+    
+    calc_peaks = return_peaks and (threshold is None or st.session_state['peaks_below_thresh'] or db_value(df.name, freq, db) >= threshold)
+    print(db, db_value(df.name, freq, db), threshold, calc_peaks)
+
     if smooth_on:
         result = calculate_and_plot_wave_orig(df, freq, db, peak_finding_model, return_peaks=calc_peaks)
     else:

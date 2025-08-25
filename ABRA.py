@@ -67,8 +67,7 @@ def main():
     tab1, tab2 = st.sidebar.tabs(["Data", "Plotting and Analysis"])
     
     uploaded_files = tab1.file_uploader("**Upload files to analyze:**", type=["csv", "arf", "asc", "tsv"], accept_multiple_files=True)
-    is_rz_file = "RZ"
-
+    
     # Inputs:
     inputs = tab1.expander("Input data properties", expanded=True)
     placeholder = inputs.empty()
@@ -77,11 +76,12 @@ def main():
     # baseline_level = float(baseline_level_str)
     is_click = inputs.radio("Tone or click? (for .arf files)", ("Tone", "Click"), horizontal=True)
     click = True if is_click == "Click" else False
+    # is_rz_file = inputs.radio("BioSig version (.arf files):", ("RZ", "RP"), horizontal=True, index=0) 
     is_atten = inputs.toggle("dB saved as attenuation (.arf only)", value=False, key="atten")
 
     if uploaded_files:
 
-        dfs, duration = process_uploaded_files_cached(uploaded_files, is_rz_file, click, is_atten)
+        dfs, duration = process_uploaded_files_cached(uploaded_files, "RZ", click, is_atten)
 
         if duration is not None:
             time_scale = placeholder.number_input("Time scale of recording (detected from file, ms)", value=duration, format="%0.6f", key="time_scale")
@@ -104,19 +104,18 @@ def main():
 
         if is_atten:
             cal_levels = tab1.expander("Calibration dB levels", expanded=True)
-            # TODO: ask if this needs to be set per file or should be generalized across all files??
             for file_path in selected_files: 
                 file_name = os.path.basename(file_path)
                 for hz in distinct_freqs:
-                    key = (file_name, hz)
+                    key = hz
                     if key not in st.session_state.calibration_levels:
                         st.session_state.calibration_levels[key] = 100.0
                     st.session_state.calibration_levels[key] = cal_levels.number_input(
-                        f"Calibration dB for {file_name} at {hz} Hz",
+                        f"Calibration dB for {hz} Hz",
                         value=st.session_state.calibration_levels[key],
                         step=5.0,
                         format="%0.1f",
-                        key=f"cal_{file_name}_{hz}"
+                        key=f"cal_{hz}"
                     )
             # TODO: add option to set legend to show attenuation
             #atten_legend = cal_levels.toggle("Use attenuation levels in plot legends", value=False)

@@ -141,10 +141,11 @@ def plot_waves_single_frequency(selected_dfs, selected_files, freq, plot_time_wa
                     original_waves.append(y_values.tolist())
                     continue
 
-                color = 'black' if db == threshold else glasbey_colors[i]
-                width = 5 if db == threshold else 2
-                name = f'{int(db_value(file_df.name, freq, db))} dB' 
-                if db == threshold:
+                cal_dB = db_value(file_df.name, freq, db)
+                color = 'black' if cal_dB == threshold else glasbey_colors[i]
+                width = 5 if cal_dB == threshold else 2
+                name = f'{int(cal_dB)} dB' 
+                if cal_dB == threshold:
                     name = 'Threshold: ' + name
                 
                 fig.add_trace(go.Scatter(x=x_values, y=y_values, mode='lines', name=name, line=dict(color=color, width=width)))
@@ -314,7 +315,7 @@ def plot_waves_stacked(selected_dfs, selected_files, freq, stacked_labels=None):
         db_levels = sorted(unique_dbs, reverse=True) if db_column == 'Level(dB)' else sorted(unique_dbs)
         if db_column == 'PostAtten(dB)':
             db_levels = np.array(db_levels)
-            calibration_level = np.full(len(db_levels), st.session_state.calibration_levels[(file_df.name, freq)])
+            calibration_level = np.full(len(db_levels), st.session_state.calibration_levels[freq])
             db_levels = calibration_level - db_levels
 
         # db_levels = sorted([db_value(file_df.name, freq, db) for db in unique_dbs], reverse=True)
@@ -358,8 +359,7 @@ def plot_waves_stacked(selected_dfs, selected_files, freq, stacked_labels=None):
                                             name=f'{int(db)} dB',
                                             line=dict(color=color_scale)))
                     
-                    if db_value(file_df.name, freq, db) == threshold:
-#                   if (db_column == 'Level(dB)' and db == threshold) or (db_column == 'PostAtten(dB)' and calibration_level[0] - db == threshold):
+                    if db == threshold:            
                         is_thresh=True
                         fig.add_trace(go.Scatter(x=np.linspace(0, st.session_state.time_scale, len(y_values)),
                                                 y=y_values,
@@ -390,7 +390,8 @@ def plot_waves_stacked(selected_dfs, selected_files, freq, stacked_labels=None):
                         xanchor="right"
                     )
             except Exception as e:
-                st.write(f"Error processing dB level {db}: {e}")
+                pass
+                # st.write(f"Error processing dB level {db}: {e}")
 
         # Add vertical scale bar
         # if max_value and y_min >= -5 and y_min <= 1:

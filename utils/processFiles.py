@@ -116,36 +116,50 @@ def arfread(PATH, **kwargs):
             data['groups'][x]['beg_t'] = struct.unpack(beg_t_format, fid.read(read_size))[0]
             data['groups'][x]['end_t'] = struct.unpack(end_t_format, fid.read(read_size))[0]
 
-            data['groups'][x].update({
-                'sgfname1': get_str(fid.read(100)),
-                'sgfname2': get_str(fid.read(100)),
-                'VarName1': get_str(fid.read(15)),
-                'VarName2': get_str(fid.read(15)),
-                'VarName3': get_str(fid.read(15)),
-                'VarName4': get_str(fid.read(15)),
-                'VarName5': get_str(fid.read(15)),
-                'VarName6': get_str(fid.read(15)),
-                'VarName7': get_str(fid.read(15)),
-                'VarName8': get_str(fid.read(15)),
-                'VarName9': get_str(fid.read(15)),
-                'VarName10': get_str(fid.read(15)),
-                'VarUnit1': get_str(fid.read(5)),
-                'VarUnit2': get_str(fid.read(5)),
-                'VarUnit3': get_str(fid.read(5)),
-                'VarUnit4': get_str(fid.read(5)),
-                'VarUnit5': get_str(fid.read(5)),
-                'VarUnit6': get_str(fid.read(5)),
-                'VarUnit7': get_str(fid.read(5)),
-                'VarUnit8': get_str(fid.read(5)),
-                'VarUnit9': get_str(fid.read(5)),
-                'VarUnit10': get_str(fid.read(5)),
-                'SampPer_us': struct.unpack('f', fid.read(4))[0],
-                'cc_t': struct.unpack('i', fid.read(4))[0],
-                'version': struct.unpack('h', fid.read(2))[0],
-                'postproc': struct.unpack('i', fid.read(4))[0],
-                'dump': get_str(fid.read(92)),
-                'recs': [],
-            })
+            try:
+                data['groups'][x].update({
+                    'sgfname1': get_str(fid.read(100)),
+                    'sgfname2': get_str(fid.read(100)),
+                    'VarName1': get_str(fid.read(15)),
+                    'VarName2': get_str(fid.read(15)),
+                    'VarName3': get_str(fid.read(15)),
+                    'VarName4': get_str(fid.read(15)),
+                    'VarName5': get_str(fid.read(15)),
+                    'VarName6': get_str(fid.read(15)),
+                    'VarName7': get_str(fid.read(15)),
+                    'VarName8': get_str(fid.read(15)),
+                    'VarName9': get_str(fid.read(15)),
+                    'VarName10': get_str(fid.read(15)),
+                    'VarUnit1': get_str(fid.read(5)),
+                    'VarUnit2': get_str(fid.read(5)),
+                    'VarUnit3': get_str(fid.read(5)),
+                    'VarUnit4': get_str(fid.read(5)),
+                    'VarUnit5': get_str(fid.read(5)),
+                    'VarUnit6': get_str(fid.read(5)),
+                    'VarUnit7': get_str(fid.read(5)),
+                    'VarUnit8': get_str(fid.read(5)),
+                    'VarUnit9': get_str(fid.read(5)),
+                    'VarUnit10': get_str(fid.read(5)),
+                    'SampPer_us': struct.unpack('f', fid.read(4))[0],
+                    'cc_t': struct.unpack('i', fid.read(4))[0],
+                    'version': struct.unpack('h', fid.read(2))[0],
+                    'postproc': struct.unpack('i', fid.read(4))[0],
+                    'dump': get_str(fid.read(92)),
+                    'recs': [],
+                })
+            except:
+                # Try reading as RP format if RZ failed
+                if isRZ:
+                    try:
+                        # Recursively call with RP=True
+                        return arfread(PATH, RP=True)
+                    except:
+                        st.error(f"Error reading file. Could not read as either RZ or RP format.")
+                        return None
+                else:
+                    st.error(f"Error reading file.")
+                    return None
+                
 
             for i in range(data['groups'][x]['nrecs']):
                 record_data = {
@@ -305,7 +319,7 @@ def db_column_name():
 def db_value(file_name, freq, db):
     atten = st.session_state.get('atten', False)
     if atten:
-        return st.session_state.calibration_levels[(file_name, freq)] - int(db)
+        return st.session_state.calibration_levels[freq] - int(db)
     else:
         return db
     
