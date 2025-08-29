@@ -40,9 +40,9 @@ def peak_finding(wave, peak_finding_model):
     smoothed_waveform = gaussian_filter1d(wave, sigma=1.0)
 
     # Find peaks and troughs
-    n = 18
-    t = 14
-    start_point = prediction - 6
+    # n, t, window = 18, 14, 6
+    n, t, window = 16, 7, 10
+    start_point = prediction - window
     smoothed_peaks, _ = find_peaks(smoothed_waveform[start_point:], distance=n)
     smoothed_troughs, _ = find_peaks(-smoothed_waveform, distance=t)
     sorted_indices = np.argsort(smoothed_waveform[smoothed_peaks+start_point])
