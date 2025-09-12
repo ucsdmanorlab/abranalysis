@@ -325,11 +325,9 @@ def main():
                             next_val = latency_values[sorted_cols[i + 1]]
                             
                             if not pd.isna(current_val) and not pd.isna(next_val) and current_val >= next_val:
-                                # highlight row red in table:
-                                edited_peaks_df.iloc[row_idx, col_idx] = f"<span style='color:red'>{new_value}</span>"
                                 error_msg = f"{file_name}: {sorted_cols[i]} ({current_val}) should be < {sorted_cols[i + 1]} ({next_val})"
                                 validation_errors.append(error_msg)
-                                st.toast(f"{error_msg}")
+                                # st.toast(f"{error_msg}")
                     if validation_errors:
                         col2.error("**Warning:** Peak latencies are not in increasing order. Please check the edits.")
                 
