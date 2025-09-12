@@ -15,7 +15,6 @@ warnings.filterwarnings('ignore')
 # TODO: consider converting freqs to kHz throughout for readability
 # TODO: correct units
 # TODO: make 3D plots work for tsv files
-# TODO: check timescale of tsvs in training data...
 
 # Co-authored by: Abhijeeth Erra and Jeffrey Chen
 def clear_plots_and_tables():
@@ -24,6 +23,8 @@ def clear_plots_and_tables():
     st.session_state['current_table'] = None
     st.session_state['threshold_table'] = None
     st.session_state['peaks_table'] = None
+    st.session_state['peak_editor_table'] = None
+    st.session_state.editing_peaks_table = False
 
 def manual_threshold_warning():
     if 'manual_thresholds' in st.session_state and st.session_state.manual_thresholds:
@@ -54,9 +55,12 @@ def check_settings_and_clear_cache():
                 st.session_state.calculated_waves.clear()
             if 'manual_thresholds' in st.session_state:
                 st.session_state.manual_thresholds.clear()
+            if 'manual_peaks' in st.session_state:
+                st.session_state.manual_peaks.clear()
+            clear_plots_and_tables()
     
     st.session_state.previous_calc_settings = calc_settings
-    clear_plots_and_tables()
+    
 
 def main():    
     if 'calibration_levels' not in st.session_state:
@@ -165,8 +169,9 @@ def main():
             clear_plots_and_tables()
             st.session_state['current_plots'] = [plot_waves_single_tuple(selected_dfs, selected_files,freq, db, show_peaks=show_peaks)]
             st.session_state['current_plot_filenames'] = [(selected_files[0].split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+ "_"+db_str.replace(' ','')+".pdf") if len(selected_files)==1 else "all_files_" +freq_str.replace(' ','')+ "_"+db_str.replace(' ','')+".pdf"]
-            st.session_state['current_table'] =  display_peaks_table(selected_dfs, selected_files, [freq], [db], return_threshold=True, return_nas=True)
-
+            st.session_state['peaks_table'] =  display_peaks_table(selected_dfs, selected_files, [freq], [db], return_threshold=True, return_nas=True)
+            st.session_state['peak_editor_table'] =  display_peaks_table(selected_dfs, selected_files, [freq], [db], return_threshold=True, return_nas=True, editable=True)
+            
         freqbuttons1, freqbuttons2 = tab2.columns([1, 1.5])
         if freqbuttons1.button("Single frequency", use_container_width=True):
             clear_plots_and_tables()
@@ -174,6 +179,7 @@ def main():
             st.session_state['current_plot_filenames'] = [f.split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+".pdf" for f in selected_files]
             st.session_state['threshold_table'] = display_threshold_table(selected_dfs, selected_files, [freq])
             st.session_state['peaks_table'] = display_peaks_table(selected_dfs, selected_files, [freq], distinct_dbs)
+            st.session_state['peak_editor_table'] =  display_peaks_table(selected_dfs, selected_files, [freq], distinct_dbs, return_threshold=True, return_nas=True, editable=True)
 
         if freqbuttons2.button('Single frequency, stacked', use_container_width=True):
             clear_plots_and_tables()
@@ -250,9 +256,83 @@ def main():
             manual_threshold_warning()
         if 'peaks_table' in st.session_state and st.session_state['peaks_table'] is not None:
             peaks_table = st.session_state['peaks_table']
-            disable_columns = [col for col in peaks_table.columns if col in lock_cols]
-            edited_peaks_df = st.data_editor(peaks_table, hide_index=True, use_container_width=True, disabled=disable_columns)
+            if not st.session_state.editing_peaks_table:
+                st.dataframe(peaks_table, hide_index=True, use_container_width=True)
+                if 'peak_editor_table' in st.session_state and st.session_state.peak_editor_table is not None:
+                    col1, col2, col3 = st.columns([1, 1, 1])
+                    if col1.button("Edit peaks table"):
+                        st.session_state.editing_peaks_table = True
+                        st.rerun()
+                    if 'manual_peaks' in st.session_state and st.session_state.manual_peaks:
+                        col2.warning("Manual peak edits are set.")
+                        if col3.button("Clear manual peak edits"):
+                            st.session_state.manual_peaks.clear()
+                            st.success("Manual peak edits cleared. Choose plot option to refresh.")
+            else:
+                col1, col2 = st.columns([1, 1])
+                col1.warning("**Editing peaks mode**")
 
+                peak_editor_table = st.session_state['peak_editor_table'] 
+                disable_columns = [col for col in peak_editor_table.columns if 'latency' not in col]
+                edited_peaks_df = st.data_editor(peak_editor_table, hide_index=True, use_container_width=True, disabled=disable_columns, key="peaks_editor")
+                
+                if st.button("Done editing"):
+                    st.session_state.editing_peaks_table = False
+                    st.rerun()
+
+                if (edited_peaks_df != peak_editor_table).any().any():
+                    if 'manual_peaks' not in st.session_state:
+                        st.session_state.manual_peaks = {}
+
+                    diffs = edited_peaks_df.ne(peak_editor_table)
+                    edited_positions = np.where(diffs)
+                    
+                    validation_errors =[]
+
+                    for row_idx, col_idx in zip(edited_positions[0], edited_positions[1]):
+                        file_name = edited_peaks_df.iloc[row_idx]['File Name']
+                        freq = edited_peaks_df.iloc[row_idx]['Frequency (Hz)']
+                        db_column = 'Sound amplitude (dB SPL)' if level else 'Attenuation (dB)'
+                        db = edited_peaks_df.iloc[row_idx][db_column]
+
+                        column_name = edited_peaks_df.columns[col_idx]
+                        new_value = edited_peaks_df.iloc[row_idx, col_idx]
+                        
+                        waveform_key = f"{file_name}_{freq}_{db}"
+                        if waveform_key not in st.session_state.manual_peaks:
+                            st.session_state.manual_peaks[waveform_key] = {}
+
+                        st.session_state.manual_peaks[waveform_key][column_name]= new_value
+
+                    for row_idx in edited_positions[0]:
+                        file_name = edited_peaks_df.iloc[row_idx]['File Name']
+                        freq = edited_peaks_df.iloc[row_idx]['Frequency (Hz)']
+                        db_spl = edited_peaks_df.iloc[row_idx]['Sound amplitude (dB SPL)']
+                        
+                        # Get all peak latencies for this waveform (edited + original)
+                        waveform_key = f"{file_name}_{freq}_{db_spl}"
+                        latency_values = {}
+                        
+                        # Get latency columns and their current values
+                        latency_cols = [col for col in edited_peaks_df.columns if 'latency' in col and 'Peak' in col]
+                        for col in latency_cols:
+                            latency_values[col] = edited_peaks_df.iloc[row_idx][col]
+                        
+                        # Check ordering
+                        sorted_cols = sorted(latency_cols, key=lambda x: int(x.split()[1]))  # Sort by peak number
+                        for i in range(len(sorted_cols) - 1):
+                            current_val = latency_values[sorted_cols[i]]
+                            next_val = latency_values[sorted_cols[i + 1]]
+                            
+                            if not pd.isna(current_val) and not pd.isna(next_val) and current_val >= next_val:
+                                # highlight row red in table:
+                                edited_peaks_df.iloc[row_idx, col_idx] = f"<span style='color:red'>{new_value}</span>"
+                                error_msg = f"{file_name}: {sorted_cols[i]} ({current_val}) should be < {sorted_cols[i + 1]} ({next_val})"
+                                validation_errors.append(error_msg)
+                                st.toast(f"{error_msg}")
+                    if validation_errors:
+                        col2.error("**Warning:** Peak latencies are not in increasing order. Please check the edits.")
+                
     else:
         tab2.write("Please upload files to analyze in the 'Data' tab.")
 
