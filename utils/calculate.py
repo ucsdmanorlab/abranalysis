@@ -410,51 +410,65 @@ def apply_manual_peak_edits(file_name, freq, db, x_values, y_values, highest_pea
     
     manual_edits = st.session_state.manual_peaks[waveform_key]
     
-    # Convert manual latencies back to array indices
-    modified_peaks = highest_peaks.copy() if highest_peaks is not None else np.array([])
-    modified_troughs = relevant_troughs.copy() if relevant_troughs is not None else np.array([])
+    if highest_peaks is not None and len(highest_peaks) > 0:
+        padded_peaks = np.full(5, np.nan)
+        padded_peaks[:len(highest_peaks)] = highest_peaks
+        modified_peaks = padded_peaks.copy()
+    else:
+        modified_peaks = np.full(5, np.nan)
     
-    # Apply manual peak edits
+    if relevant_troughs is not None and len(relevant_troughs) > 0:
+        padded_troughs = np.full(5, np.nan)
+        padded_troughs[:len(relevant_troughs)] = relevant_troughs
+        modified_troughs = padded_troughs.copy()
+    else:
+        modified_troughs = np.full(5, np.nan)
+
     for column, latency_ms in manual_edits.items():
         if 'Peak' in column and 'latency' in column and not pd.isna(latency_ms):
-            # Extract peak number (e.g., "Peak 1 latency (ms)" -> 1)
-            peak_num = int(column.split()[1]) - 1  # Convert to 0-based index
+            peak_num = int(column.split()[1]) - 1  
             
-            # Convert latency (ms) to array index
             time_per_sample = st.session_state.time_scale / len(y_values)
-            new_index = int(latency_ms / time_per_sample)
-            
-            # Update the peak position if within bounds
+            new_index = int(np.round(latency_ms / time_per_sample))
+
             if 0 <= new_index < len(y_values) and peak_num < len(modified_peaks):
-                modified_peaks[peak_num] = new_index
+                check_range = slice(max(0, new_index - 1), min(len(y_values) - 1, new_index + 1))
+                local_max_index = np.argmax(y_values[check_range]) + check_range.start
+                modified_peaks[peak_num] = local_max_index
         
         elif 'Trough' in column and 'latency' in column and not pd.isna(latency_ms):
-            # Extract trough number
             trough_num = int(column.split()[1]) - 1
             
-            # Convert latency to array index
             time_per_sample = st.session_state.time_scale / len(y_values)
-            new_index = int(latency_ms / time_per_sample)
+            new_index = int(np.round(latency_ms / time_per_sample))
             
-            # Update the trough position if within bounds
             if 0 <= new_index < len(y_values) and trough_num < len(modified_troughs):
-                modified_troughs[trough_num] = new_index
+                check_range = slice(max(0, new_index - 1), min(len(y_values) - 1, new_index + 1))
+                local_min_index = np.argmin(y_values[check_range]) + check_range.start
+                modified_troughs[trough_num] = local_min_index
     
-    return modified_peaks, modified_troughs
+    valid_peaks = modified_peaks[~np.isnan(modified_peaks)]
+    valid_troughs = modified_troughs[~np.isnan(modified_troughs)]
+    
+    if len(valid_peaks) > 0:
+        valid_peaks = valid_peaks.astype(int)
+    else:
+        valid_peaks = np.array([], dtype=int)
+        
+    if len(valid_troughs) > 0:
+        valid_troughs = valid_troughs.astype(int)
+    else:
+        valid_troughs = np.array([], dtype=int)
+    
+    return valid_peaks, valid_troughs
 
 def calculate_and_plot_wave(df, freq, db, peak_finding_model=default_peak_finding_model(), return_peaks=True):
     file_name = getattr(df, 'name', 'unknown_file')
-    smooth_on = st.session_state.get('smooth_on', True)
 
-    cache_key = f"wave_{file_name}_{freq}_{db}_{smooth_on}_{return_peaks}" 
+    cache_key = f"wave_{file_name}_{freq}_{db}_{return_peaks}" 
 
     if 'calculated_waves' not in st.session_state:
         st.session_state.calculated_waves = {}
-
-    # if 'manual_peaks' in st.session_state:
-    #     manual_cache_key = f"{file_name}_{freq}_{db}"
-    #     if manual_cache_key in st.session_state.manual_peaks:
-    #         return st.session_state.manual_peaks[manual_cache_key]
 
     if cache_key in st.session_state.calculated_waves:
         cached_result = st.session_state.calculated_waves[cache_key]
@@ -479,12 +493,8 @@ def calculate_and_plot_wave(df, freq, db, peak_finding_model=default_peak_findin
         pass
     
     calc_peaks = return_peaks and (threshold is None or st.session_state['peaks_below_thresh'] or db_value(df.name, freq, db) >= threshold)
-    print(db, db_value(df.name, freq, db), threshold, calc_peaks)
-
-    if smooth_on:
-        result = calculate_and_plot_wave_orig(df, freq, db, peak_finding_model, return_peaks=calc_peaks)
-    else:
-        result = calculate_and_plot_wave_exact(df, freq, db, peak_finding_model, return_peaks=calc_peaks)
+    
+    result = calculate_and_plot_wave_exact(df, freq, db, peak_finding_model, return_peaks=calc_peaks)
 
     st.session_state.calculated_waves[cache_key] = result
     return result
@@ -540,47 +550,3 @@ def calculate_and_plot_wave_exact(df, freq, db, peak_finding_model=default_peak_
     else:
         return None, None, None, None
 
-def calculate_and_plot_wave_orig(df, freq, db, peak_finding_model=default_peak_finding_model(), return_peaks=True,):
-    atten = st.session_state.get('atten', False)
-    db_column = 'Level(dB)' if not atten else 'PostAtten(dB)'
-    khz = df[(df['Freq(Hz)'] == freq) & (df[db_column] == db)]
-    if not khz.empty:
-        index = khz.index.values[-1]
-        final = df.loc[index, '0':].dropna()
-        final = pd.to_numeric(final, errors='coerce').dropna()
-
-        target = int(244 * (st.session_state.time_scale / 10))
-
-        y_values = interpolate_and_smooth(final, target)  # Original y-values for plotting
-        sampling_rate = len(y_values) / st.session_state.time_scale
-
-        x_values = np.linspace(0, len(y_values) / sampling_rate, len(y_values))
-
-        #y_values = interpolate_and_smooth(final[:244])
-        if st.session_state.units == 'Nanovolts':
-            y_values /= 1000
-
-        y_values *= st.session_state.multiply_y_factor
-        if not return_peaks:
-            return x_values, y_values, None, None
-        
-        y_values_fpf = interpolate_and_smooth(y_values[:244])
-
-        # Flatten the data to scale all values across the group
-        flattened_data = y_values_fpf.values.flatten().reshape(-1, 1)
-
-        # Step 1: Standardize the data
-        scaler = StandardScaler()
-        standardized_data = scaler.fit_transform(flattened_data)
-
-        # Step 2: Apply min-max scaling
-        min_max_scaler = MinMaxScaler(feature_range=(0, 1))
-        scaled_data = min_max_scaler.fit_transform(standardized_data).reshape(y_values_fpf.shape)
-
-        y_values_fpf = interpolate_and_smooth(scaled_data[:244])
-
-        highest_peaks, relevant_troughs = peak_finding(y_values_fpf, peak_finding_model)
-
-        return x_values, y_values, highest_peaks, relevant_troughs
-    else:
-        return None, None, None, None
