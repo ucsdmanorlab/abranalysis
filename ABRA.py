@@ -26,14 +26,6 @@ def clear_plots_and_tables():
     st.session_state['peak_editor_table'] = None
     st.session_state.editing_peaks_table = False
 
-def manual_threshold_warning():
-    if 'manual_thresholds' in st.session_state and st.session_state.manual_thresholds:
-        col1, col2 = st.columns([2, 1])
-        col1.warning("Manual thresholds are set.")
-        if col2.button("Clear manual thresholds"):
-            st.session_state.manual_thresholds.clear()
-            st.success("Manual thresholds cleared. Choose plot option to refresh.")
-
 def check_settings_and_clear_cache():
     calc_settings = {
         'time_scale': st.session_state.get('time_scale', 10.0),
@@ -44,7 +36,7 @@ def check_settings_and_clear_cache():
         'peaks_below_thresh': st.session_state.get('peaks_below_thresh', False),
     }
     
-    # Check if settings changed
+    # CHECK SETTINGS CHANGES FIRST
     if 'previous_calc_settings' in st.session_state:
         if st.session_state.previous_calc_settings != calc_settings:
             st.warning("Settings have changed. Cleared calculated values.")
@@ -52,13 +44,87 @@ def check_settings_and_clear_cache():
                 st.session_state.calculated_thresholds.clear()
             if 'calculated_waves' in st.session_state:
                 st.session_state.calculated_waves.clear()
-            if 'manual_thresholds' in st.session_state:
-                st.session_state.manual_thresholds.clear()
-            if 'manual_peaks' in st.session_state:
-                st.session_state.manual_peaks.clear()
             clear_plots_and_tables()
-    
-    st.session_state.previous_calc_settings = calc_settings
+            
+            # SHOW MANUAL EDIT CLEARING OPTIONS WHEN SETTINGS CHANGE
+            has_manual_thresholds = ('manual_thresholds' in st.session_state and st.session_state.manual_thresholds)
+            has_manual_peaks = ('manual_peaks' in st.session_state and st.session_state.manual_peaks)
+            
+            if has_manual_thresholds or has_manual_peaks:
+                with st.expander("🔧 Clear Manual Edits?", expanded=True):
+                    st.warning("Manual edits detected. Do you want to clear them?")
+                    col1, col2, col3 = st.columns([1, 1, 1])
+                    
+                    if has_manual_thresholds:
+                        if col1.button("Clear Thresholds", use_container_width=True, type="primary", key="clear_thresh_settings"):
+                            st.session_state.manual_thresholds.clear()
+                            st.session_state.previous_calc_settings = calc_settings
+                            st.success("Manual thresholds cleared!")
+                            st.rerun()
+                    
+                    if has_manual_peaks:
+                        if col2.button("Clear Peaks", use_container_width=True, type="primary", key="clear_peaks_settings"):
+                            st.session_state.manual_peaks.clear()
+                            if 'calculated_waves' in st.session_state:
+                                st.session_state.calculated_waves.clear()
+                            st.session_state.previous_calc_settings = calc_settings
+                            st.success("Manual peaks cleared!")
+                            st.rerun()
+                    
+                    if has_manual_thresholds and has_manual_peaks:
+                        if col3.button("Clear All", use_container_width=True, type="primary", key="clear_all_settings"):
+                            st.session_state.manual_thresholds.clear()
+                            st.session_state.manual_peaks.clear()
+                            if 'calculated_waves' in st.session_state:
+                                st.session_state.calculated_waves.clear()
+                            st.session_state.previous_calc_settings = calc_settings
+                            st.success("All manual edits cleared!")
+                            st.rerun()
+                    
+                    # Keep edits button
+                    if st.button("Keep Manual Edits", use_container_width=True, type="secondary", key="keep_edits_settings"):
+                        st.session_state.previous_calc_settings = calc_settings
+                        st.info("Manual edits preserved.")
+                        st.rerun()
+            else:
+                # No manual edits - just update settings
+                st.session_state.previous_calc_settings = calc_settings
+        else:
+            # Settings haven't changed - show persistent manual edit management
+            has_manual_thresholds = ('manual_thresholds' in st.session_state and st.session_state.manual_thresholds)
+            has_manual_peaks = ('manual_peaks' in st.session_state and st.session_state.manual_peaks)
+            
+            if has_manual_thresholds or has_manual_peaks:
+                with st.expander("🔧 Manual Edits Management", expanded=False):
+                    st.info("Manual edits are currently active")
+                    col1, col2, col3 = st.columns([1, 1, 1])
+                    
+                    if has_manual_thresholds:
+                        if col1.button("Clear Thresholds", use_container_width=True, type="primary", key="clear_thresh_main"):
+                            st.session_state.manual_thresholds.clear()
+                            st.success("Manual thresholds cleared!")
+                            st.rerun()
+                    
+                    if has_manual_peaks:
+                        if col2.button("Clear Peaks", use_container_width=True, type="primary", key="clear_peaks_main"):
+                            st.session_state.manual_peaks.clear()
+                            if 'calculated_waves' in st.session_state:
+                                st.session_state.calculated_waves.clear()
+                            st.success("Manual peaks cleared!")
+                            st.rerun()
+                    
+                    if has_manual_thresholds and has_manual_peaks:
+                        if col3.button("Clear All", use_container_width=True, type="primary", key="clear_all_main"):
+                            st.session_state.manual_thresholds.clear()
+                            st.session_state.manual_peaks.clear()
+                            if 'calculated_waves' in st.session_state:
+                                st.session_state.calculated_waves.clear()
+                            st.success("All manual edits cleared!")
+                            st.rerun()
+    else:
+        # First time running - store settings
+        st.session_state.previous_calc_settings = calc_settings
+
 def get_current_plot_context():
     """Determine what type of plot is currently displayed"""
     if 'current_plot_filenames' not in st.session_state:
@@ -262,7 +328,6 @@ def main():
         if 'current_table' in st.session_state and st.session_state['current_table'] is not None:
             metrics_table = st.session_state['current_table']
             st.dataframe(metrics_table, hide_index=True, use_container_width=True)
-            manual_threshold_warning()
             
         if 'threshold_table' in st.session_state and st.session_state['threshold_table'] is not None:
             threshold_table = st.session_state['threshold_table']
@@ -279,7 +344,7 @@ def main():
                     threshold = edited_df.iloc[row_idx]['Estimated Threshold']
                     edit_key = f"{file_name}_{freq}"
                     st.session_state.manual_thresholds[edit_key] = threshold
-            manual_threshold_warning()
+                    st.success(f"Set manual threshold for {file_name}, {freq} Hz to {threshold} dB. Choose plot option to refresh.")
         if 'peaks_table' in st.session_state and st.session_state['peaks_table'] is not None:
             peaks_table = st.session_state['peaks_table']
             
@@ -294,15 +359,7 @@ def main():
                     if col1.button("Edit peaks table"):
                         st.session_state.editing_peaks_table = True
                         st.rerun()
-                    if 'manual_peaks' in st.session_state and st.session_state.manual_peaks:
-                        col2.warning("Manual peak edits are set.")
-                        if col3.button("Clear manual peak edits"):
-                            st.session_state.manual_peaks.clear()
-                            # Clear wave cache to force recalculation
-                            if 'calculated_waves' in st.session_state:
-                                st.session_state.calculated_waves.clear()
-                                st.session_state.manual_peaks.clear()
-                            st.success("Manual peak edits cleared. Choose plot option to refresh.")
+                    
             else:
                 col1, col2 = st.columns([1, 1])
                 col1.warning("**Editing peaks mode**")

@@ -497,6 +497,16 @@ def calculate_and_plot_wave(df, freq, db, peak_finding_model=default_peak_findin
     result = calculate_and_plot_wave_exact(df, freq, db, peak_finding_model, return_peaks=calc_peaks)
 
     st.session_state.calculated_waves[cache_key] = result
+
+    if return_peaks and len(result) == 4:
+        x_values, y_values, highest_peaks, relevant_troughs = result
+        if y_values is not None:
+            db_spl = db_value(file_name, freq, db)
+            modified_peaks, modified_troughs = apply_manual_peak_edits(
+                file_name.split('/')[-1], freq, db_spl, x_values, y_values, highest_peaks, relevant_troughs
+            )
+            return x_values, y_values, modified_peaks, modified_troughs
+
     return result
 
 def calculate_and_plot_wave_exact(df, freq, db, peak_finding_model=default_peak_finding_model(), return_peaks=True,
