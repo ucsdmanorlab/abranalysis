@@ -3,20 +3,26 @@ import numpy as np
 import pandas as pd
 from scipy.interpolate import CubicSpline
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
-from scipy.signal import find_peaks
+from scipy.signal import find_peaks, butter, filtfilt
+
 from scipy.ndimage import gaussian_filter1d
 from .models import default_peak_finding_model, default_thresholding_model
 import streamlit as st
 from .ui import *
 from .processFiles import db_value
 
-def interpolate_and_smooth(y, target_length=244):
+def interpolate_and_smooth(y, target_length=244, anti_alias=False):
     x = np.linspace(0, 1, len(y))
     new_x = np.linspace(0, 1, target_length)
     
     if len(y) == target_length:
         final = y
     elif len(y) > target_length:
+        if anti_alias:
+            ratio = target_length / len(y)
+            nyquist = 0.5 * ratio
+            b, a = butter(4, nyquist, btype='low')
+            y = filtfilt(b, a, y)
         interpolated_values = np.interp(new_x, x, y).astype(float)
         final = pd.Series(interpolated_values)
     elif len(y) < target_length:
@@ -25,7 +31,7 @@ def interpolate_and_smooth(y, target_length=244):
 
     return pd.Series(final)
 
-def peak_finding(wave, peak_finding_model):
+def peak_finding(wave, peak_finding_model, running_avg_method=True):
 
     # Prepare waveform
     waveform = interpolate_and_smooth(wave)
@@ -38,15 +44,37 @@ def peak_finding(wave, peak_finding_model):
 
     # Apply Gaussian smoothing
     smoothed_waveform = gaussian_filter1d(wave, sigma=1.0)
+    if running_avg_method:
+        avg_window = 25
+        running_average = np.convolve(smoothed_waveform, np.ones(avg_window)/avg_window, mode='same')
+        smoothed_waveform = smoothed_waveform - running_average
 
     # Find peaks and troughs
-    # n, t, window = 18, 14, 6
     n, t, window = 16, 7, 10
     start_point = prediction - window
     smoothed_peaks, _ = find_peaks(smoothed_waveform[start_point:], distance=n)
     smoothed_troughs, _ = find_peaks(-smoothed_waveform, distance=t)
-    sorted_indices = np.argsort(smoothed_waveform[smoothed_peaks+start_point])
-    highest_smoothed_peaks = np.sort(smoothed_peaks[sorted_indices[-5:]] + start_point)
+
+    peaks_within_ms = np.array([])
+    ms_cutoff = 0.25
+    while len(peaks_within_ms) == 0:
+        ms_window = int(ms_cutoff * len(smoothed_waveform) / 10)  
+        candidate_peaks = smoothed_peaks + start_point
+        within_ms_mask = np.abs(candidate_peaks - prediction) <= ms_window
+        peaks_within_ms = candidate_peaks[within_ms_mask]
+        ms_cutoff += 0.25
+    tallest_peak_idx = np.argmax(smoothed_waveform[peaks_within_ms])
+    pk1 = peaks_within_ms[tallest_peak_idx]
+
+    peaks = smoothed_peaks + start_point
+    peaks = peaks[peaks>pk1]
+    sorted_indices = np.argsort(smoothed_waveform[peaks])
+
+    highest_smoothed_peaks = np.sort(np.concatenate(
+        ([pk1], peaks[sorted_indices[-min(4, peaks.size):]])
+        )) 
+    # sorted_indices = np.argsort(smoothed_waveform[smoothed_peaks+start_point])
+    # highest_smoothed_peaks = np.sort(smoothed_peaks[sorted_indices[-5:]] + start_point)
     relevant_troughs = np.array([])
     for p in range(len(highest_smoothed_peaks)):
         c = 0
@@ -65,19 +93,6 @@ def peak_finding(wave, peak_finding_model):
     relevant_troughs = relevant_troughs.astype('i')
     return highest_smoothed_peaks, relevant_troughs
 
-# def check_threshold(df, freq):
-#     file_name = getattr(df, 'name', 'unknown_file')
-
-#     if 'manual_thresholds' in st.session_state:
-#         manual_cache_key = f"{file_name}_{freq}"
-#         if manual_cache_key in st.session_state.manual_thresholds:
-#             return st.session_state.manual_thresholds[manual_cache_key]
-        
-#     cache_key = f"threshold_{file_name}_{freq}"
-#     if 'calculated_thresholds' in st.session_state and cache_key in st.session_state.calculated_thresholds:
-#         return st.session_state.calculated_thresholds[cache_key]
-    
-#     return None
 
 def calculate_hearing_threshold(df, freq):
     file_name = getattr(df, 'name', 'unknown_file')
@@ -470,22 +485,6 @@ def calculate_and_plot_wave(df, freq, db, peak_finding_model=default_peak_findin
     if 'calculated_waves' not in st.session_state:
         st.session_state.calculated_waves = {}
 
-    if cache_key in st.session_state.calculated_waves:
-        cached_result = st.session_state.calculated_waves[cache_key]
-
-        # Apply manual peak edits to cached result if needed
-        if return_peaks and len(cached_result) == 4:
-            x_values, y_values, highest_peaks, relevant_troughs = cached_result
-            if y_values is not None:
-                # Get dB value for this measurement
-                db_spl = db_value(file_name, freq, db)
-                modified_peaks, modified_troughs = apply_manual_peak_edits(
-                    file_name.split('/')[-1], freq, db_spl, x_values, y_values, highest_peaks, relevant_troughs
-                )
-                return x_values, y_values, modified_peaks, modified_troughs
-        
-        return cached_result
-
     threshold=None
     try:
         threshold = np.abs(calculate_hearing_threshold(df, freq))
@@ -493,7 +492,25 @@ def calculate_and_plot_wave(df, freq, db, peak_finding_model=default_peak_findin
         pass
     
     calc_peaks = return_peaks and (threshold is None or st.session_state['peaks_below_thresh'] or db_value(df.name, freq, db) >= threshold)
-    
+    if cache_key in st.session_state.calculated_waves:
+        cached_result = st.session_state.calculated_waves[cache_key]
+
+        if return_peaks and len(cached_result) == 4:
+            x_values, y_values, highest_peaks, relevant_troughs = cached_result            
+            if y_values is not None:
+                if not calc_peaks: # don't return peaks under threshold if threshold has changed
+                    return x_values, y_values, None, None
+                if calc_peaks and highest_peaks is None: # recalculate peaks that are now supra-threshold
+                    pass
+                else:
+                    db_spl = db_value(file_name, freq, db)
+                    modified_peaks, modified_troughs = apply_manual_peak_edits(
+                        file_name.split('/')[-1], freq, db_spl, x_values, y_values, highest_peaks, relevant_troughs
+                    )
+                    return x_values, y_values, modified_peaks, modified_troughs
+        else: 
+            return cached_result
+
     result = calculate_and_plot_wave_exact(df, freq, db, peak_finding_model, return_peaks=calc_peaks)
 
     st.session_state.calculated_waves[cache_key] = result

@@ -218,28 +218,26 @@ def main():
             #atten_legend = cal_levels.toggle("Use attenuation levels in plot legends", value=False)
 
         # Output settings:
-        outputs = tab2.expander("Output and plot settings", expanded=False)
-        return_units = outputs.selectbox("Units for plots and outputs", options=['Microvolts', 'Nanovolts'], index=0, key="return_units")
-        if return_units == 'Nanovolts':
-            ymin = -5000.0
-            ymax = 5000.0
-        else:
-            ymin = -5.0
-            ymax = 5.0
-        auto_y = outputs.toggle("Auto Y-axis scaling", value=True, key="auto_y")
-        y_min = outputs.number_input("Y-axis minimum", value=ymin, disabled=auto_y, key="y_min")
-        y_max = outputs.number_input("Y-axis maximum", value=ymax, disabled=auto_y, key="y_max")
-        plot_time_warped = outputs.toggle("Plot time warped curves", False, key="plot_time_warped")
-        show_legend = outputs.toggle("Show legend", True, key="show_legend")
-        show_peaks = outputs.toggle("Show peaks (single wave and single frequency plots)", True)
-        serif_font = outputs.toggle("Use serif fonts in plots", value=False, key="serif_font")
-
-        advanced_settings = tab2.expander("Advanced settings", expanded=False)
+        outputs = tab2.expander("**Visualization**", expanded=False)
+        show_legend = outputs.toggle("Plot legends", True, key="show_legend")
+        return_units = outputs.selectbox("Output units", options=['Microvolts', 'Nanovolts'], index=0, key="return_units")
+        auto_y = outputs.toggle("Auto-scale Y", value=True, key="auto_y")
+        if not auto_y:
+            ycol1, ycol2 = outputs.columns(2)
+            y_min = ycol1.number_input("Y min", value=-5000 if return_units == 'Nanovolts' else -5.0, key="y_min")
+            y_max = ycol2.number_input("Y max", value=5000 if return_units == 'Nanovolts' else 5.0, key="y_max")
+        plot_time_warped = outputs.toggle("Time warping", False, key="plot_time_warped")
+        serif_font = outputs.toggle("Serif fonts", value=False, key="serif_font")
+        #peak_settings = tab2.expander("**Peak & trough settings**", expanded=False)
+        show_peaks = outputs.toggle("Show peaks/troughs", True)
+        
+        advanced_settings = tab2.expander("**Advanced settings**", expanded=False)
         multiply_y_factor = advanced_settings.number_input("Multiply Y values by factor", value=1.0, key="multiply_y_factor")
         vert_space = advanced_settings.number_input("Vertical space (for stacked curves)", value=10.0, min_value=0.0, step=1.0, key="vert_space")
         stacked_labels = advanced_settings.selectbox("Stacked labels position", options=["Left outside", "Right outside", "Right inside", "Off"], index=2)
-        all_peaks = advanced_settings.toggle("Output all peaks and troughs (experimental)", value=False, key="all_peaks")
-        peaks_below_thresh = advanced_settings.toggle("Calculate peaks/troughs below threshold", value=False, key="peaks_below_thresh")
+        all_peaks = advanced_settings.toggle("ALL peaks/troughs in table (experimental)", value=False, key="all_peaks")
+        peaks_below_thresh = advanced_settings.toggle("Peaks below threshold", value=False, key="peaks_below_thresh")
+
         #unfilter_pk1 = advanced_settings.toggle("Include sub-threshold peak 1 amplitudes", value=False, key="unfilter_pk1")
 
         check_settings_and_clear_cache()
