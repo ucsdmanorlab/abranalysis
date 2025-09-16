@@ -36,7 +36,6 @@ def check_settings_and_clear_cache():
         'peaks_below_thresh': st.session_state.get('peaks_below_thresh', False),
     }
     
-    # CHECK SETTINGS CHANGES FIRST
     if 'previous_calc_settings' in st.session_state:
         if st.session_state.previous_calc_settings != calc_settings:
             st.warning("Settings have changed. Cleared calculated values.")
@@ -46,7 +45,6 @@ def check_settings_and_clear_cache():
                 st.session_state.calculated_waves.clear()
             clear_plots_and_tables()
             
-            # SHOW MANUAL EDIT CLEARING OPTIONS WHEN SETTINGS CHANGE
             has_manual_thresholds = ('manual_thresholds' in st.session_state and st.session_state.manual_thresholds)
             has_manual_peaks = ('manual_peaks' in st.session_state and st.session_state.manual_peaks)
             
@@ -164,7 +162,7 @@ def main():
     tab1, tab2 = st.sidebar.tabs(["Data", "Plotting and Analysis"])
     
     uploaded_files = tab1.file_uploader("**Upload files to analyze:**", type=["csv", "arf", "asc", "tsv"], accept_multiple_files=True)
-    
+    tab1.markdown("<small><i>Note: All uploaded files are processed in memory only and are not retained by the application.</i></small>", unsafe_allow_html=True)
     # Inputs:
     inputs = tab1.expander("Input data properties", expanded=True)
     placeholder = inputs.empty()
