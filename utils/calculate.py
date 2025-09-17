@@ -31,7 +31,7 @@ def interpolate_and_smooth(y, target_length=244, anti_alias=False):
 
     return pd.Series(final)
 
-def peak_finding(wave, peak_finding_model, running_avg_method=True):
+def peak_finding(wave, peak_finding_model, running_avg_method=False):
 
     # Prepare waveform
     waveform = interpolate_and_smooth(wave)

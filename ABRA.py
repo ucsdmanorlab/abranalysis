@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from utils.calculate import *
+from utils.calculate import display_threshold_table, display_peaks_table
 from utils.plotting import *
 from utils.processFiles import get_selected_data, process_uploaded_files_cached, db_column_name
 
@@ -153,9 +153,7 @@ def get_current_plot_context():
 def main():    
     if 'calibration_levels' not in st.session_state:
         st.session_state.calibration_levels = {}
-    plots_need_update = False
-    validation_errors = []
-    edits_made = False
+    
 
     # Streamlit UI
     st.title("ABRA")
@@ -175,7 +173,8 @@ def main():
     is_atten = inputs.toggle("dB saved as attenuation (.arf only)", value=False, key="atten")
 
     if uploaded_files:
-
+        validation_errors = []
+        edits_made = False
         dfs, duration = process_uploaded_files_cached(uploaded_files, "RZ", click, is_atten)
 
         if duration is not None:
@@ -310,16 +309,45 @@ def main():
         if 'current_plots' in st.session_state and st.session_state['current_plots']:
             for i, fig in enumerate(st.session_state['current_plots']): # in range(len(fig_list)):
                 st.plotly_chart(fig)
-                buffer = io.BytesIO()
-                fig.write_image(file=buffer, format="pdf")
+                try:
+                    buffer = io.BytesIO()
+                    fig.write_image(file=buffer, format="pdf")
 
-                st.download_button(
-                    label="Download plot as PDF",
-                    data=buffer,
-                    file_name=st.session_state['current_plot_filenames'][i],
-                    mime="application/pdf",
-                    key=f'plot_download_{i}'
-                )
+                    st.download_button(
+                        label="Download plot as PDF",
+                        data=buffer,
+                        file_name=st.session_state['current_plot_filenames'][i],
+                        mime="application/pdf",
+                        key=f'plot_download_{i}',
+                        help="Download high-quality pdf plot"
+                    )
+                except Exception as e:
+                    # Fallback to HTML for maximum compatibility
+                    html_buffer = io.StringIO()
+                    fig.write_html(html_buffer)
+                    html_filename = st.session_state['current_plot_filenames'][i].replace('.pdf', '.html')
+
+                    col1, col2 = st.columns([1, 2])
+                    with col1:
+                        st.download_button(
+                            label="Download as HTML",
+                            data=html_buffer.getvalue(),
+                            file_name=html_filename,
+                            mime="text/html",
+                            key=f'plot_download_html_{i}',
+                            help="Download interactive plot - works in all browsers"
+                        )
+                    with col2:
+                        with st.expander("PDF export unavailable - browser compatibility", expanded=False):
+                            st.markdown("""
+                            **For PDF exports:**
+                            1. Install Chrome: [google.com/chrome](https://www.google.com/chrome/)
+                            
+                            **Alternative workflow:**
+                            1. Download the HTML file
+                            2. Open in browser → Print → Save as PDF
+                            """)
+                        
         lock_cols = ["File Name", "Frequency (Hz)", 'Sound amplitude (dB SPL)', 'Attenuation (dB)', 'Calibration Level (dB)']
         if 'current_table' in st.session_state and st.session_state['current_table'] is not None:
             metrics_table = st.session_state['current_table']
