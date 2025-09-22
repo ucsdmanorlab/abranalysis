@@ -7,10 +7,10 @@ def initialize_progress_bar():
     return progress_bar, status_text, count
 
 def update_progress_bar(progress_bar, status_text, count, total, status_string):
-    count += 1
-    progress_bar.progress(count / total)
+    progress_value = min(count / total, 1.0) if total > 0 else 0.0
+    progress_bar.progress(progress_value)
     status_text.text(status_string)
-    return count
+    return count + 1
 
 def clear_status_bar(progress_bar, status_text):
     progress_bar.empty()
