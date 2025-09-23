@@ -51,7 +51,7 @@ def peak_finding(wave, peak_finding_model, running_avg_method=False):
 
     # Find peaks and troughs
     n, t, window = 16, 7, 10
-    start_point = prediction - window
+    start_point = max(0, prediction - window)
     smoothed_peaks, _ = find_peaks(smoothed_waveform[start_point:], distance=n)
     smoothed_troughs, _ = find_peaks(-smoothed_waveform, distance=t)
 
@@ -77,18 +77,17 @@ def peak_finding(wave, peak_finding_model, running_avg_method=False):
     # highest_smoothed_peaks = np.sort(smoothed_peaks[sorted_indices[-5:]] + start_point)
     relevant_troughs = np.array([])
     for p in range(len(highest_smoothed_peaks)):
-        c = 0
-        for t in smoothed_troughs:
-            if t > highest_smoothed_peaks[p]:
+        for tr in smoothed_troughs:
+            if tr > highest_smoothed_peaks[p]:
                 if p != 4:
                     try:
-                        if t < highest_smoothed_peaks[p+1]:
-                            relevant_troughs = np.append(relevant_troughs, int(t))
+                        if tr < highest_smoothed_peaks[p+1]:
+                            relevant_troughs = np.append(relevant_troughs, int(tr))
                             break
                     except IndexError:
                         pass
                 else:
-                    relevant_troughs = np.append(relevant_troughs, int(t))
+                    relevant_troughs = np.append(relevant_troughs, int(tr))
                     break
     relevant_troughs = relevant_troughs.astype('i')
     return highest_smoothed_peaks, relevant_troughs
