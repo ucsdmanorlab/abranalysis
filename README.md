@@ -37,6 +37,18 @@ streamlit run ABRA.py
 ```
 As new updates are released in the future, you can always pull the latest version by running `git remote update` from inside your abranalysis directory. 
 
+## API-only Installation
+
+If you only want to use ABRA's analysis functions programmatically without the web interface:
+
+```
+conda create -y -n abra python=3.12 
+conda activate abra
+pip install -r requirements-api.txt
+```
+
+See notebooks for usage. 
+
 ## Usage: 
 First upload your file. If you're loading an Tucker Davis .arf file please select whether you got the file from BioSigRP or BioSigRZ. If you're uploading a .csv file make sure that the title for the decibel column is `Level(dB)`, the title for the frequency column is `Freq(Hz)`, and the vector of data points ends each corresponding row.
 <br></br>
