@@ -13,7 +13,6 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # TODO: consider converting freqs to kHz throughout for readability
-# TODO: correct units
 # TODO: make 3D plots work for tsv files
 
 # Co-authored by: Abhijeeth Erra and Jeffrey Chen
@@ -469,6 +468,7 @@ def main():
         tab2.write("Please upload files to analyze in the 'Data' tab.")
 
     st.sidebar.caption("[preprint](https://www.biorxiv.org/content/10.1101/2024.06.20.599815v2) | [github](https://github.com/ucsdmanorlab/abranalysis)")
+    st.caption("_ABRA uses automated algorithms for ABR analysis, which may occasionally produce incorrect labels or thresholds. Users should visually verify results and apply expert judgment before drawing conclusions._")
 
 if __name__ == "__main__":
     main()            
