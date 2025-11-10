@@ -53,14 +53,14 @@ def check_settings_and_clear_cache():
                     col1, col2, col3 = st.columns([1, 1, 1])
                     
                     if has_manual_thresholds:
-                        if col1.button("Clear Thresholds", use_container_width=True, type="primary", key="clear_thresh_settings"):
+                        if col1.button("Clear Thresholds", width='stretch', type="primary", key="clear_thresh_settings"):
                             st.session_state.manual_thresholds.clear()
                             st.session_state.previous_calc_settings = calc_settings
                             st.success("Manual thresholds cleared!")
                             st.rerun()
                     
                     if has_manual_peaks:
-                        if col2.button("Clear Peaks", use_container_width=True, type="primary", key="clear_peaks_settings"):
+                        if col2.button("Clear Peaks", width='stretch', type="primary", key="clear_peaks_settings"):
                             st.session_state.manual_peaks.clear()
                             if 'calculated_waves' in st.session_state:
                                 st.session_state.calculated_waves.clear()
@@ -69,7 +69,7 @@ def check_settings_and_clear_cache():
                             st.rerun()
                     
                     if has_manual_thresholds and has_manual_peaks:
-                        if col3.button("Clear All", use_container_width=True, type="primary", key="clear_all_settings"):
+                        if col3.button("Clear All", width='stretch', type="primary", key="clear_all_settings"):
                             st.session_state.manual_thresholds.clear()
                             st.session_state.manual_peaks.clear()
                             if 'calculated_waves' in st.session_state:
@@ -79,7 +79,7 @@ def check_settings_and_clear_cache():
                             st.rerun()
                     
                     # Keep edits button
-                    if st.button("Keep Manual Edits", use_container_width=True, type="secondary", key="keep_edits_settings"):
+                    if st.button("Keep Manual Edits", width='stretch', type="secondary", key="keep_edits_settings"):
                         st.session_state.previous_calc_settings = calc_settings
                         st.info("Manual edits preserved.")
                         st.rerun()
@@ -97,13 +97,13 @@ def check_settings_and_clear_cache():
                     col1, col2, col3 = st.columns([1, 1, 1])
                     
                     if has_manual_thresholds:
-                        if col1.button("Clear Thresholds", use_container_width=True, type="primary", key="clear_thresh_main"):
+                        if col1.button("Clear Thresholds", width='stretch', type="primary", key="clear_thresh_main"):
                             st.session_state.manual_thresholds.clear()
                             st.success("Manual thresholds cleared!")
                             st.rerun()
                     
                     if has_manual_peaks:
-                        if col2.button("Clear Peaks", use_container_width=True, type="primary", key="clear_peaks_main"):
+                        if col2.button("Clear Peaks", width='stretch', type="primary", key="clear_peaks_main"):
                             st.session_state.manual_peaks.clear()
                             if 'calculated_waves' in st.session_state:
                                 st.session_state.calculated_waves.clear()
@@ -111,7 +111,7 @@ def check_settings_and_clear_cache():
                             st.rerun()
                     
                     if has_manual_thresholds and has_manual_peaks:
-                        if col3.button("Clear All", use_container_width=True, type="primary", key="clear_all_main"):
+                        if col3.button("Clear All", width='stretch', type="primary", key="clear_all_main"):
                             st.session_state.manual_thresholds.clear()
                             st.session_state.manual_peaks.clear()
                             if 'calculated_waves' in st.session_state:
@@ -251,7 +251,7 @@ def main():
         freq_str = freq if type(freq) == str else str(freq/1000) + " kHz"
         db_str = str(int(db)) + " dB"
         tab2.header("Plot:")
-        if tab2.button("Single wave ("+freq_str+", "+db_str+")", use_container_width=True):
+        if tab2.button("Single wave ("+freq_str+", "+db_str+")", width='stretch'):
             clear_plots_and_tables()
             st.session_state['current_plots'] = [plot_waves_single_tuple(selected_dfs, selected_files,freq, db, show_peaks=show_peaks)]
             st.session_state['current_plot_filenames'] = [(selected_files[0].split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+ "_"+db_str.replace(' ','')+".pdf") if len(selected_files)==1 else "all_files_" +freq_str.replace(' ','')+ "_"+db_str.replace(' ','')+".pdf"]
@@ -259,7 +259,7 @@ def main():
             st.session_state['peak_editor_table'] =  display_peaks_table(selected_dfs, selected_files, [freq], [db], return_threshold=True, return_nas=True, editable=True)
             
         freqbuttons1, freqbuttons2 = tab2.columns([1, 1.5])
-        if freqbuttons1.button("Single frequency", use_container_width=True):
+        if freqbuttons1.button("Single frequency", width='stretch'):
             clear_plots_and_tables()
             st.session_state['current_plots'] = plot_waves_single_frequency(selected_dfs, selected_files, freq, plot_time_warped=plot_time_warped, show_peaks=show_peaks)
             st.session_state['current_plot_filenames'] = [f.split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+".pdf" for f in selected_files]
@@ -267,39 +267,39 @@ def main():
             st.session_state['peaks_table'] = display_peaks_table(selected_dfs, selected_files, [freq], distinct_dbs)
             st.session_state['peak_editor_table'] =  display_peaks_table(selected_dfs, selected_files, [freq], distinct_dbs, return_threshold=True, return_nas=True, editable=True)
 
-        if freqbuttons2.button('Single frequency, stacked', use_container_width=True):
+        if freqbuttons2.button('Single frequency, stacked', width='stretch'):
             clear_plots_and_tables()
             st.session_state['current_plots'] = plot_waves_stacked(selected_dfs, selected_files, freq, stacked_labels=stacked_labels)
             st.session_state['current_plot_filenames'] = [f.split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+"_stacked.pdf" for f in selected_files]
             st.session_state['threshold_table'] =  display_threshold_table(selected_dfs, selected_files, [freq])
             
-        if tab2.button("Single dB SPL", use_container_width=True):
+        if tab2.button("Single dB SPL", width='stretch'):
             clear_plots_and_tables()
             st.session_state['current_plots'] = plot_waves_single_dB(selected_dfs, selected_files, db, plot_time_warped=plot_time_warped, show_peaks=show_peaks)
             st.session_state['current_plot_filenames'] = [f.split("/")[-1].split('.')[0] + "_" + str(int(db)) + "dB.pdf" for f in selected_files]
             
-        if tab2.button("3D surface", use_container_width=True):
+        if tab2.button("3D surface", width='stretch'):
             clear_plots_and_tables()
             st.session_state['current_plots'] = plot_3d_surface(selected_dfs, selected_files, freq, plot_time_warped=plot_time_warped)
             st.session_state['current_plot_filenames'] = [f.split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+ "_3Dplot.pdf" for f in selected_files]
            
         iobuttons1, iobuttons2 = tab2.columns([1, 1.5])
-        if iobuttons1.button("I/O curve", use_container_width=True):
+        if iobuttons1.button("I/O curve", width='stretch'):
             clear_plots_and_tables()
             st.session_state['current_plots'] = plot_io_curve(selected_dfs, selected_files, [freq], distinct_dbs)
             st.session_state['current_plot_filenames'] = [f.split("/")[-1].split('.')[0] + "_" + freq_str.replace(' ','')+ "_IO_plot.pdf" for f in selected_files]
             
-        if iobuttons2.button("All I/O curves", use_container_width=True):
+        if iobuttons2.button("All I/O curves", width='stretch'):
             clear_plots_and_tables()
             st.session_state['current_plots'] = plot_io_curve(selected_dfs, selected_files, distinct_freqs, distinct_dbs)
             st.session_state['current_plot_filenames'] = [f.split("/")[-1].split('.')[0] + "_IO_plot.pdf" for f in selected_files]
 
         tab2.header("Data outputs:")
-        if tab2.button("Return all thresholds", use_container_width=True):
+        if tab2.button("Return all thresholds", width='stretch'):
             clear_plots_and_tables()
             st.session_state['threshold_table'] = display_threshold_table(selected_dfs, selected_files, distinct_freqs)
             
-        if tab2.button("Return all peak analyses", use_container_width=True):
+        if tab2.button("Return all peak analyses", width='stretch'):
             clear_plots_and_tables()
             st.session_state['current_table'] =  display_peaks_table(selected_dfs, selected_files, distinct_freqs, distinct_dbs, return_threshold=True)
             # display_metrics_table_all_db(selected_dfs, selected_files, distinct_freqs, distinct_dbs)
@@ -350,12 +350,12 @@ def main():
         lock_cols = ["File Name", "Frequency (Hz)", 'Sound amplitude (dB SPL)', 'Attenuation (dB)', 'Calibration Level (dB)']
         if 'current_table' in st.session_state and st.session_state['current_table'] is not None:
             metrics_table = st.session_state['current_table']
-            st.dataframe(metrics_table, hide_index=True, use_container_width=True)
+            st.dataframe(metrics_table, hide_index=True, width='stretch')
             
         if 'threshold_table' in st.session_state and st.session_state['threshold_table'] is not None:
             threshold_table = st.session_state['threshold_table']
             disable_columns = [col for col in threshold_table.columns if col in lock_cols]
-            edited_df = st.data_editor(threshold_table, hide_index=True, use_container_width=True, disabled=disable_columns)
+            edited_df = st.data_editor(threshold_table, hide_index=True, width='stretch', disabled=disable_columns)
             if (edited_df != threshold_table).any().any():
                 if 'manual_thresholds' not in st.session_state:
                     st.session_state.manual_thresholds = {}
@@ -376,7 +376,7 @@ def main():
                 st.session_state.editing_peaks_table = False
             
             if not st.session_state.editing_peaks_table:
-                st.dataframe(peaks_table, hide_index=True, use_container_width=True)
+                st.dataframe(peaks_table, hide_index=True, width='stretch')
                 if 'peak_editor_table' in st.session_state and st.session_state.peak_editor_table is not None:
                     col1, col2, col3 = st.columns([1, 1, 1])
                     if col1.button("Edit peaks table"):
@@ -389,7 +389,7 @@ def main():
 
                 peak_editor_table = st.session_state['peak_editor_table'] 
                 disable_columns = [col for col in peak_editor_table.columns if 'latency' not in col]
-                edited_peaks_df = st.data_editor(peak_editor_table, hide_index=True, use_container_width=True, disabled=disable_columns, key="peaks_editor")
+                edited_peaks_df = st.data_editor(peak_editor_table, hide_index=True, width='stretch', disabled=disable_columns, key="peaks_editor")
                 
                 if st.button("Done editing"):
                     if (edited_peaks_df != peak_editor_table).any().any():

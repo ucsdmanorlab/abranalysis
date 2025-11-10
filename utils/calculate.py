@@ -2,27 +2,22 @@ import torch
 import numpy as np
 import pandas as pd
 from scipy.interpolate import CubicSpline
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
-from scipy.signal import find_peaks, butter, filtfilt
-
 from scipy.ndimage import gaussian_filter1d
+from scipy.signal import find_peaks
+from sklearn.preprocessing import MinMaxScaler
+
 from .models import default_peak_finding_model, default_thresholding_model
 import streamlit as st
 from .ui import *
 from .processFiles import db_value
 
-def interpolate_and_smooth(y, target_length=244, anti_alias=False):
+def interpolate_and_smooth(y, target_length=244):
     x = np.linspace(0, 1, len(y))
     new_x = np.linspace(0, 1, target_length)
     
     if len(y) == target_length:
         final = y
     elif len(y) > target_length:
-        if anti_alias:
-            ratio = target_length / len(y)
-            nyquist = 0.5 * ratio
-            b, a = butter(4, nyquist, btype='low')
-            y = filtfilt(b, a, y)
         interpolated_values = np.interp(new_x, x, y).astype(float)
         final = pd.Series(interpolated_values)
     elif len(y) < target_length:
@@ -31,11 +26,8 @@ def interpolate_and_smooth(y, target_length=244, anti_alias=False):
 
     return pd.Series(final)
 
-def peak_finding(wave, peak_finding_model, running_avg_method=False):
-
-    # Prepare waveform
-    waveform = interpolate_and_smooth(wave)
-    
+def peak_finding(waveform, peak_finding_model, running_avg_method=False):
+    # TODO: add option to choose peaks by prominance instead of height?
     waveform_torch = torch.tensor(waveform, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
     
     # Get prediction from model
@@ -43,7 +35,7 @@ def peak_finding(wave, peak_finding_model, running_avg_method=False):
     prediction = int(round(pk_outputs.detach().numpy()[0][0], 0))
 
     # Apply Gaussian smoothing
-    smoothed_waveform = gaussian_filter1d(wave, sigma=1.0)
+    smoothed_waveform = gaussian_filter1d(waveform, sigma=1.0)
     if running_avg_method:
         avg_window = 25
         running_average = np.convolve(smoothed_waveform, np.ones(avg_window)/avg_window, mode='same')
@@ -117,7 +109,7 @@ def calculate_hearing_threshold(df, freq):
     df_filtered = df[df['Freq(Hz)'] == freq]
 
     # Get unique dB levels for the filtered DataFrame
-    db_levels = sorted(df_filtered[db_column].unique(), reverse=True) if db_column == 'Level(dB)' else sorted(df_filtered[db_column].unique())
+    db_levels = sorted(df_filtered[db_column].unique()) if db_column == 'Level(dB)' else sorted(df_filtered[db_column].unique(), reverse=True)
     waves = []
 
     for db in db_levels:
@@ -140,38 +132,47 @@ def calculate_hearing_threshold(df, freq):
     
     waves = np.array(waves)
     flattened_data = waves.flatten().reshape(-1, 1)
-    scaler = StandardScaler()
-    standardized_data = scaler.fit_transform(flattened_data)
-
-    # Step 2: Apply min-max scaling
     min_max_scaler = MinMaxScaler(feature_range=(0, 1))  # Adjust range if needed
-    scaled_data = min_max_scaler.fit_transform(standardized_data).reshape(waves.shape)
+    scaled_data = min_max_scaler.fit_transform(flattened_data).reshape(waves.shape)
     waves = np.expand_dims(scaled_data, axis=2)
     
     # Perform prediction
     prediction = thresholding_model.predict(waves)
-    y_pred = (prediction > 0.5).astype(int).flatten()
+    y_pred = (prediction >= 0.5).astype(int).flatten()
 
     if db_column == 'PostAtten(dB)':
         db_levels = np.array(db_levels)
         calibration_level = np.full(len(db_levels), st.session_state.calibration_levels[freq])
         db_levels = calibration_level - db_levels
 
-    lowest_db = db_levels[0]
     previous_prediction = None
 
-
     for p, d in zip(y_pred, db_levels):
-        if p == 0:
-            if previous_prediction == 0:
+        if p == 1:
+            if previous_prediction == 1:
+                rbu_thresh = prev_db
                 break
             previous_prediction = p
+            prev_db = d
         else:
-            lowest_db = d
             previous_prediction = p
-    st.session_state.calculated_thresholds[cache_key] = lowest_db
+        rbu_thresh = d # fallback to last dB if no break occurs
 
-    return lowest_db
+    # Top down method:
+    # lowest_db = db_levels[0]
+    # previous_prediction = None
+
+    # for p, d in zip(y_pred, db_levels):
+    #     if p == 0:
+    #         if previous_prediction == 0:
+    #             break
+    #         previous_prediction = p
+    #     else:
+    #         lowest_db = d
+    #         previous_prediction = p
+    st.session_state.calculated_thresholds[cache_key] = rbu_thresh
+
+    return rbu_thresh
 
 def display_threshold_table(selected_dfs, selected_files, freqs):
     progress_bar, status_text, count = initialize_progress_bar()
@@ -536,7 +537,7 @@ def calculate_and_plot_wave_exact(df, freq, db, peak_finding_model=default_peak_
         index = khz.index.values[-1] # in .arfs, sometimes multiple recordings if one is repeated, often the last one is the best
         
         orig_y = df.loc[index, '0':].dropna()
-        orig_y = pd.to_numeric(orig_y, errors='coerce')#.dropna()
+        orig_y = pd.to_numeric(orig_y, errors='coerce').dropna()
         orig_x = np.linspace(0, st.session_state.time_scale, len(orig_y))
 
         if st.session_state.units == 'Nanovolts':
@@ -551,14 +552,8 @@ def calculate_and_plot_wave_exact(df, freq, db, peak_finding_model=default_peak_
         y_values_fpf = interpolate_and_smooth(orig_y[:tenms], 244)
 
         flattened_data = y_values_fpf.values.flatten().reshape(-1, 1)
-
-        # Step 1: Standardize the data
-        scaler = StandardScaler()
-        standardized_data = scaler.fit_transform(flattened_data)
-
-        # Step 2: Apply min-max scaling
         min_max_scaler = MinMaxScaler(feature_range=(0, 1))
-        scaled_data = min_max_scaler.fit_transform(standardized_data).reshape(y_values_fpf.shape)
+        scaled_data = min_max_scaler.fit_transform(flattened_data).reshape(y_values_fpf.shape)
 
         y_values_fpf = scaled_data
 

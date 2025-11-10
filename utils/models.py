@@ -42,6 +42,6 @@ def default_peak_finding_model():
     return peak_finding_model
 
 def default_thresholding_model():
-    thresholding_model = load_model('utils/models/abr_thresholding.keras')
+    thresholding_model = load_model('utils/models/abr_thresholding_NEW.keras')
     thresholding_model.steps_per_execution = 1
     return thresholding_model

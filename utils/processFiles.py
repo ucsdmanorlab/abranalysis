@@ -283,6 +283,10 @@ def process_uploaded_files_cached(uploaded_files, is_rz_file, click, is_atten):
             else:
                 df = pd.read_csv(temp_file_path, skiprows=2)
             
+            # check if Freq columnn exists:
+            if 'Freq(Hz)' not in df.columns:
+                df['Freq(Hz)'] = 0.0
+                df = df[['Freq(Hz)'] + [col for col in df.columns if col != 'Freq(Hz)']] # moves freq col to beginning
         df.name = file.name
         dfs.append(df)
        
