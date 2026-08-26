@@ -1,6 +1,7 @@
 import datetime
 import io
 import os
+import subprocess
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -11,6 +12,17 @@ from utils.processFiles import get_selected_data, process_uploaded_files_cached,
 
 import warnings
 warnings.filterwarnings('ignore')
+
+def _try_get_kaleido_chrome():
+    # one attempt per session; kaleido>=1.0 needs its own Chrome download for PDF export
+    if st.session_state.get('_kaleido_chrome_attempted'):
+        return False
+    st.session_state['_kaleido_chrome_attempted'] = True
+    try:
+        subprocess.run(['kaleido_get_chrome'], check=True, capture_output=True, timeout=120)
+        return True
+    except Exception:
+        return False
 
 # TODO: consider converting freqs to kHz throughout for readability
 # TODO: make 3D plots work for tsv files
@@ -306,37 +318,61 @@ def main():
 
         #st.markdown(get_download_link(fig), unsafe_allow_html=True)
         if 'current_plots' in st.session_state and st.session_state['current_plots']:
+            # only regenerate export buffers when the plot list itself changes, not on every widget rerun
+            plots_id = id(st.session_state['current_plots'])
+            if st.session_state.get('_plot_export_cache_id') != plots_id:
+                st.session_state['_plot_export_cache_id'] = plots_id
+                st.session_state['_plot_export_cache'] = {}
+            export_cache = st.session_state['_plot_export_cache']
+
             for i, fig in enumerate(st.session_state['current_plots']): # in range(len(fig_list)):
                 st.plotly_chart(fig)
-                try:
-                    buffer = io.BytesIO()
-                    fig.write_image(file=buffer, format="pdf")
 
-                    st.download_button(
-                        label="Download plot as PDF",
-                        data=buffer,
-                        file_name=st.session_state['current_plot_filenames'][i],
-                        mime="application/pdf",
-                        key=f'plot_download_{i}',
-                        help="Download high-quality pdf plot"
-                    )
-                except Exception as e:
-                    # Fallback to HTML for maximum compatibility
+                if i not in export_cache:
                     html_buffer = io.StringIO()
                     fig.write_html(html_buffer)
-                    html_filename = st.session_state['current_plot_filenames'][i].replace('.pdf', '.html')
+                    html_bytes = html_buffer.getvalue()
 
-                    col1, col2 = st.columns([1, 2])
-                    with col1:
+                    pdf_bytes, pdf_error = None, None
+                    try:
+                        buffer = io.BytesIO()
+                        try:
+                            fig.write_image(file=buffer, format="pdf")
+                        except Exception:
+                            if not _try_get_kaleido_chrome():
+                                raise
+                            buffer = io.BytesIO()
+                            fig.write_image(file=buffer, format="pdf")
+                        pdf_bytes = buffer.getvalue()
+                    except Exception as e:
+                        pdf_error = e
+
+                    export_cache[i] = (html_bytes, pdf_bytes, pdf_error)
+
+                html_bytes, pdf_bytes, pdf_error = export_cache[i]
+                html_filename = st.session_state['current_plot_filenames'][i].replace('.pdf', '.html')
+
+                col1, col2 = st.columns([1, 2])
+                with col1:
+                    st.download_button(
+                        label="Download plot as HTML",
+                        data=html_bytes,
+                        file_name=html_filename,
+                        mime="text/html",
+                        key=f'plot_download_html_{i}',
+                        help="Download interactive plot to share or view in browser"
+                    )
+                with col2:
+                    if pdf_bytes is not None:
                         st.download_button(
-                            label="Download as HTML",
-                            data=html_buffer.getvalue(),
-                            file_name=html_filename,
-                            mime="text/html",
-                            key=f'plot_download_html_{i}',
-                            help="Download interactive plot - works in all browsers"
+                            label="Download plot as PDF",
+                            data=pdf_bytes,
+                            file_name=st.session_state['current_plot_filenames'][i],
+                            mime="application/pdf",
+                            key=f'plot_download_{i}',
+                            help="Download high-quality pdf plot"
                         )
-                    with col2:
+                    else:
                         with st.expander("PDF export unavailable - browser compatibility", expanded=False):
                             st.markdown("""
                             **For PDF exports:**
