@@ -2,6 +2,10 @@ import streamlit as st
 from .calculate import *
 import plotly.graph_objects as go
 import numpy as np
+
+if not hasattr(np, "trapezoid"):
+    np.trapezoid = np.trapz
+
 import fdasrsf as fs
 import colorcet as cc
 import pandas as pd
