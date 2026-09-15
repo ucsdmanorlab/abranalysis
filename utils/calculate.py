@@ -537,7 +537,7 @@ def calculate_and_plot_wave_exact(df, freq, db, peak_finding_model=default_peak_
         index = khz.index.values[-1] # in .arfs, sometimes multiple recordings if one is repeated, often the last one is the best
         
         orig_y = df.loc[index, '0':].dropna()
-        orig_y = pd.to_numeric(orig_y, errors='coerce').dropna()
+        orig_y = pd.to_numeric(orig_y, errors='coerce').dropna().to_numpy(dtype=float)
         orig_x = np.linspace(0, st.session_state.time_scale, len(orig_y))
 
         if st.session_state.units == 'Nanovolts':
@@ -570,4 +570,3 @@ def calculate_and_plot_wave_exact(df, freq, db, peak_finding_model=default_peak_
         return orig_x, orig_y, highest_peaks, relevant_troughs
     else:
         return None, None, None, None
-
