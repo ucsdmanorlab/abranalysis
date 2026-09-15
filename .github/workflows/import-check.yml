@@ -1,0 +1,39 @@
+name: Import Check
+
+# Verifies that ABRA's dependencies and internal modules install and import
+# cleanly on Linux, macOS, and Windows. This catches platform-specific
+# install/import problems (e.g. torch, tensorflow, scikit-fda, fdasrsf) that
+# may not surface when only testing on a single machine.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  import-check:
+    name: Import check (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run import smoke tests
+        run: pytest tests/test_imports.py -v
