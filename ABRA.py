@@ -45,7 +45,7 @@ def check_settings_and_clear_cache():
         'return_units': st.session_state.get('return_units', 'Microvolts'),
         'calibration_levels': dict(st.session_state.get('calibration_levels', {}),),
         'peaks_below_thresh': st.session_state.get('peaks_below_thresh', False),
-        # 'num_peaks': st.session_state.get('num_peaks', 5),
+        'num_peaks': st.session_state.get('num_peaks', 5),
         'pretrained_pk1': st.session_state.get('pretrained_pk1', True),
         'pk1_anchor': st.session_state.get('pk1_anchor', 1.0),
         'max_pk_time': st.session_state.get('max_pk_time', 10.0),
@@ -246,7 +246,7 @@ def main():
         show_peaks = outputs.toggle("Show peaks/troughs", True)
 
         peak_settings = tab2.expander("**Peak finding settings**", expanded=False)
-        # num_peaks = peak_settings.number_input("Number of peaks", value=5, min_value=1, max_value=10, step=1, key="num_peaks")
+        num_peaks = peak_settings.number_input("Number of peaks", value=5, min_value=1, max_value=10, step=1, key="num_peaks")
         pretrained_pk1 = peak_settings.toggle("Use pretained model to detect peak I", value=True, key="pretrained_pk1")
         if not pretrained_pk1:
             pk1_anchor = peak_settings.number_input("Search for peak I around time (ms)", value=1.0, min_value=0.0, step=0.1, key="pk1_anchor")
