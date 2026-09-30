@@ -27,24 +27,41 @@ def interpolate_and_smooth(y, target_length=244):
     return pd.Series(final)
 
 def peak_finding(waveform, peak_finding_model, running_avg_method=False):
-    # TODO: add option to choose peaks by prominance instead of height?
-    waveform_torch = torch.tensor(waveform, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+    if st.session_state.get('pretrained_pk1', True):
+        waveform_torch = torch.tensor(waveform, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
     
-    # Get prediction from model
-    pk_outputs = peak_finding_model(waveform_torch)
-    prediction = int(round(pk_outputs.detach().numpy()[0][0], 0))
-
+        # Get prediction from model
+        pk_outputs = peak_finding_model(waveform_torch)
+        prediction = int(round(pk_outputs.detach().numpy()[0][0], 0))
+    else:
+        prediction = int(round(len(waveform) * st.session_state.get('pk1_anchor', 1.0)/ 10, 0))
     # Apply Gaussian smoothing
     smoothed_waveform = gaussian_filter1d(waveform, sigma=1.0)
     if running_avg_method:
-        avg_window = 25
-        running_average = np.convolve(smoothed_waveform, np.ones(avg_window)/avg_window, mode='same')
+        print("Running average method is enabled for background subtraction.")
+        avg_window = min(len(waveform), max(1, int(round(st.session_state.get('bk_window', 0.2) * len(waveform)/10, 0))))
+        print(f"Background subtraction window size: {avg_window}")
+        print(len(smoothed_waveform))
+        left_padding = avg_window // 2
+        right_padding = avg_window - left_padding - 1
+        padded_waveform = np.pad(
+            smoothed_waveform,
+            (left_padding, right_padding),
+            mode='reflect',
+            )
+        running_average = np.convolve(
+            padded_waveform,
+            np.ones(avg_window) / avg_window,
+            mode='valid',
+        )
         smoothed_waveform = smoothed_waveform - running_average
 
     # Find peaks and troughs
     n, t, window = 16, 7, 10
     start_point = max(0, prediction - window)
-    smoothed_peaks, _ = find_peaks(smoothed_waveform[start_point:], distance=n)
+    end_point = min(len(smoothed_waveform), int(round(st.session_state.get('max_pk_time', 10.0) * len(smoothed_waveform) / 10,1)))
+
+    smoothed_peaks, _ = find_peaks(smoothed_waveform[start_point:end_point], distance=n)
     smoothed_troughs, _ = find_peaks(-smoothed_waveform, distance=t)
 
     peaks_within_ms = np.array([])
@@ -62,6 +79,9 @@ def peak_finding(waveform, peak_finding_model, running_avg_method=False):
     peaks = peaks[peaks>pk1]
     sorted_indices = np.argsort(smoothed_waveform[peaks])
 
+    # prominences = peak_prominences(smoothed_waveform, peaks)[0]
+    # sorted_indices = np.argsort(prominences)
+
     highest_smoothed_peaks = np.sort(np.concatenate(
         ([pk1], peaks[sorted_indices[-min(4, peaks.size):]])
         )) 
@@ -71,7 +91,7 @@ def peak_finding(waveform, peak_finding_model, running_avg_method=False):
     for p in range(len(highest_smoothed_peaks)):
         for tr in smoothed_troughs:
             if tr > highest_smoothed_peaks[p]:
-                if p != 4:
+                if p != len(highest_smoothed_peaks) - 1:
                     try:
                         if tr < highest_smoothed_peaks[p+1]:
                             relevant_troughs = np.append(relevant_troughs, int(tr))
@@ -557,7 +577,7 @@ def calculate_and_plot_wave_exact(df, freq, db, peak_finding_model=default_peak_
 
         y_values_fpf = scaled_data
 
-        highest_peaks, relevant_troughs = peak_finding(y_values_fpf, peak_finding_model)
+        highest_peaks, relevant_troughs = peak_finding(y_values_fpf, peak_finding_model, running_avg_method=st.session_state.get('pk_bk_subtraction', False))
 
         # convert back to original x-coordinates:
         if len(highest_peaks) > 0:

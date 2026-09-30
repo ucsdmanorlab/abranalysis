@@ -45,6 +45,12 @@ def check_settings_and_clear_cache():
         'return_units': st.session_state.get('return_units', 'Microvolts'),
         'calibration_levels': dict(st.session_state.get('calibration_levels', {}),),
         'peaks_below_thresh': st.session_state.get('peaks_below_thresh', False),
+        # 'num_peaks': st.session_state.get('num_peaks', 5),
+        'pretrained_pk1': st.session_state.get('pretrained_pk1', True),
+        'pk1_anchor': st.session_state.get('pk1_anchor', 1.0),
+        'max_pk_time': st.session_state.get('max_pk_time', 10.0),
+        'pk_bk_subtraction': st.session_state.get('pk_bk_subtraction', False),
+        'bk_window': st.session_state.get('bk_window', 0.2),
     }
     
     if 'previous_calc_settings' in st.session_state:
@@ -238,7 +244,17 @@ def main():
         serif_font = outputs.toggle("Serif fonts", value=False, key="serif_font")
         #peak_settings = tab2.expander("**Peak & trough settings**", expanded=False)
         show_peaks = outputs.toggle("Show peaks/troughs", True)
-        
+
+        peak_settings = tab2.expander("**Peak finding settings**", expanded=False)
+        # num_peaks = peak_settings.number_input("Number of peaks", value=5, min_value=1, max_value=10, step=1, key="num_peaks")
+        pretrained_pk1 = peak_settings.toggle("Use pretained model to detect peak I", value=True, key="pretrained_pk1")
+        if not pretrained_pk1:
+            pk1_anchor = peak_settings.number_input("Search for peak I around time (ms)", value=1.0, min_value=0.0, step=0.1, key="pk1_anchor")
+        max_pk_time = peak_settings.number_input("Disallow peaks & troughs after time (ms)", value=8.0, min_value=1.0, max_value=10.0, step=0.1, key="max_pk_time")
+        pk_bk_subtraction = peak_settings.toggle("Use background subtraction", value=False, key="pk_bk_subtraction")
+        if pk_bk_subtraction:
+            bk_window = peak_settings.number_input("Background subtraction window (ms)", value=1.0, min_value=0.1, max_value=5.0, step=0.01, key="bk_window")
+
         advanced_settings = tab2.expander("**Advanced settings**", expanded=False)
         multiply_y_factor = advanced_settings.number_input("Multiply Y values by factor", value=1.0, key="multiply_y_factor")
         vert_space = advanced_settings.number_input("Vertical space (for stacked curves)", value=10.0, min_value=0.0, step=1.0, key="vert_space")
@@ -346,6 +362,7 @@ def main():
                         pdf_bytes = buffer.getvalue()
                     except Exception as e:
                         pdf_error = e
+                        print(f"PDF export failed: {e!r}")  # print cause in server logs
 
                     export_cache[i] = (html_bytes, pdf_bytes, pdf_error)
 
