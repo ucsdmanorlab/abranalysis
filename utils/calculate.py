@@ -27,24 +27,42 @@ def interpolate_and_smooth(y, target_length=244):
     return pd.Series(final)
 
 def peak_finding(waveform, peak_finding_model, running_avg_method=False):
-    # TODO: add option to choose peaks by prominance instead of height?
-    waveform_torch = torch.tensor(waveform, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+    n_peaks = st.session_state.get('num_peaks', 5)
+    if st.session_state.get('pretrained_pk1', True):
+        waveform_torch = torch.tensor(waveform, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
     
-    # Get prediction from model
-    pk_outputs = peak_finding_model(waveform_torch)
-    prediction = int(round(pk_outputs.detach().numpy()[0][0], 0))
-
+        # Get prediction from model
+        pk_outputs = peak_finding_model(waveform_torch)
+        prediction = int(round(pk_outputs.detach().numpy()[0][0], 0))
+    else:
+        prediction = int(round(len(waveform) * st.session_state.get('pk1_anchor', 1.0)/ 10, 0))
     # Apply Gaussian smoothing
     smoothed_waveform = gaussian_filter1d(waveform, sigma=1.0)
     if running_avg_method:
-        avg_window = 25
-        running_average = np.convolve(smoothed_waveform, np.ones(avg_window)/avg_window, mode='same')
+        print("Running average method is enabled for background subtraction.")
+        avg_window = min(len(waveform), max(1, int(round(st.session_state.get('bk_window', 0.2) * len(waveform)/10, 0))))
+        print(f"Background subtraction window size: {avg_window}")
+        print(len(smoothed_waveform))
+        left_padding = avg_window // 2
+        right_padding = avg_window - left_padding - 1
+        padded_waveform = np.pad(
+            smoothed_waveform,
+            (left_padding, right_padding),
+            mode='reflect',
+            )
+        running_average = np.convolve(
+            padded_waveform,
+            np.ones(avg_window) / avg_window,
+            mode='valid',
+        )
         smoothed_waveform = smoothed_waveform - running_average
 
     # Find peaks and troughs
     n, t, window = 16, 7, 10
     start_point = max(0, prediction - window)
-    smoothed_peaks, _ = find_peaks(smoothed_waveform[start_point:], distance=n)
+    end_point = min(len(smoothed_waveform), int(round(st.session_state.get('max_pk_time', 10.0) * len(smoothed_waveform) / 10,1)))
+
+    smoothed_peaks, _ = find_peaks(smoothed_waveform[start_point:end_point], distance=n)
     smoothed_troughs, _ = find_peaks(-smoothed_waveform, distance=t)
 
     peaks_within_ms = np.array([])
@@ -62,8 +80,11 @@ def peak_finding(waveform, peak_finding_model, running_avg_method=False):
     peaks = peaks[peaks>pk1]
     sorted_indices = np.argsort(smoothed_waveform[peaks])
 
+    # prominences = peak_prominences(smoothed_waveform, peaks)[0]
+    # sorted_indices = np.argsort(prominences)
+
     highest_smoothed_peaks = np.sort(np.concatenate(
-        ([pk1], peaks[sorted_indices[-min(4, peaks.size):]])
+        ([pk1], peaks[sorted_indices[-min(n_peaks - 1, peaks.size):]])
         )) 
     # sorted_indices = np.argsort(smoothed_waveform[smoothed_peaks+start_point])
     # highest_smoothed_peaks = np.sort(smoothed_peaks[sorted_indices[-5:]] + start_point)
@@ -71,7 +92,7 @@ def peak_finding(waveform, peak_finding_model, running_avg_method=False):
     for p in range(len(highest_smoothed_peaks)):
         for tr in smoothed_troughs:
             if tr > highest_smoothed_peaks[p]:
-                if p != 4:
+                if p != len(highest_smoothed_peaks) - 1:
                     try:
                         if tr < highest_smoothed_peaks[p+1]:
                             relevant_troughs = np.append(relevant_troughs, int(tr))
@@ -201,6 +222,7 @@ def display_threshold_table(selected_dfs, selected_files, freqs):
     return metrics_table
 
 def display_peaks_table(selected_dfs, selected_files, freqs, db_levels, return_threshold=False, return_nas=False, editable=False):
+    n_peaks = st.session_state.get('num_peaks', 5)
     progress_bar, status_text, count = initialize_progress_bar()
     metrics_data = {'File Name': [], 'Frequency (Hz)': [], 'Sound amplitude (dB SPL)': [],} 
     atten = st.session_state.get('atten', False)
@@ -216,20 +238,15 @@ def display_peaks_table(selected_dfs, selected_files, freqs, db_levels, return_t
         metrics_data = {**metrics_data, f'Wave I amplitude (P1-T1) ({ru})': [], 'Latency to First Peak (ms)': [],
                         'Amplitude Ratio (Peak1/Peak4)': []}
         if st.session_state.all_peaks:
-            metrics_data = {**metrics_data,
-                            f'Peak 1 ({ru})': [], 'Peak 1 latency (ms)': [], f'Trough 1 ({ru})': [], 'Trough 1 latency (ms)': [],
-                            f'Peak 2 ({ru})': [], 'Peak 2 latency (ms)': [], f'Trough 2 ({ru})': [], 'Trough 2 latency (ms)': [],
-                            f'Peak 3 ({ru})': [], 'Peak 3 latency (ms)': [], f'Trough 3 ({ru})': [], 'Trough 3 latency (ms)': [],
-                            f'Peak 4 ({ru})': [], 'Peak 4 latency (ms)': [], f'Trough 4 ({ru})': [], 'Trough 4 latency (ms)': [],
-                            f'Peak 5 ({ru})': [], 'Peak 5 latency (ms)': [], f'Trough 5 ({ru})': [], 'Trough 5 latency (ms)': [],
-                            }
+            for peak_num in range(1, n_peaks + 1):
+                metrics_data[f'Peak {peak_num} ({ru})'] = []
+                metrics_data[f'Peak {peak_num} latency (ms)'] = []
+                metrics_data[f'Trough {peak_num} ({ru})'] = []
+                metrics_data[f'Trough {peak_num} latency (ms)'] = []
     else:
-        metrics_data = {**metrics_data,
-                        'Peak 1 latency (ms)': [], 'Trough 1 latency (ms)': [],
-                        'Peak 2 latency (ms)': [], 'Trough 2 latency (ms)': [],
-                        'Peak 3 latency (ms)': [], 'Trough 3 latency (ms)': [],
-                        'Peak 4 latency (ms)': [], 'Trough 4 latency (ms)': [],
-                        'Peak 5 latency (ms)': [], 'Trough 5 latency (ms)': [],}
+        for peak_num in range(1, n_peaks + 1):
+            metrics_data[f'Peak {peak_num} latency (ms)'] = []
+            metrics_data[f'Trough {peak_num} latency (ms)'] = []
 
     for file_df, file_name in zip(selected_dfs, selected_files):
         for freq in freqs:
@@ -281,7 +298,7 @@ def display_peaks_table(selected_dfs, selected_files, freqs, db_levels, return_t
                         metrics_data['Amplitude Ratio (Peak1/Peak4)'].append(amplitude_ratio)
 
                         if st.session_state.all_peaks:
-                            for pk_n in range(1, 6):  # Get up to 5 peaks for metrics
+                            for pk_n in range(1, n_peaks + 1):  # Get up to n_peaks peaks for metrics
                                 peak = highest_peaks[pk_n - 1] if pk_n <= len(highest_peaks) else np.nan
                                 trough = relevant_troughs[pk_n - 1] if pk_n <= len(relevant_troughs) else np.nan
                                 metrics_data[f'Peak {pk_n} ({ru})'].append(y_values[peak] if not np.isnan(peak) else np.nan)
@@ -289,7 +306,7 @@ def display_peaks_table(selected_dfs, selected_files, freqs, db_levels, return_t
                                 metrics_data[f'Trough {pk_n} ({ru})'].append(y_values[trough] if not np.isnan(trough) else np.nan)
                                 metrics_data[f'Trough {pk_n} latency (ms)'].append(trough * (st.session_state.time_scale / len(y_values)))
                     else:
-                        for pk_n in range(1, 6):  # Get up to 5 peaks for metrics
+                        for pk_n in range(1, n_peaks + 1):  # Get up to n_peaks peaks for metrics
                             peak = highest_peaks[pk_n - 1] if pk_n <= len(highest_peaks) else np.nan
                             trough = relevant_troughs[pk_n - 1] if pk_n <= len(relevant_troughs) else np.nan
                             metrics_data[f'Peak {pk_n} latency (ms)'].append(peak * (st.session_state.time_scale / len(y_values)) if not np.isnan(peak) else np.nan)
@@ -300,13 +317,13 @@ def display_peaks_table(selected_dfs, selected_files, freqs, db_levels, return_t
                         metrics_data['Latency to First Peak (ms)'].append(np.nan)
                         metrics_data['Amplitude Ratio (Peak1/Peak4)'].append(np.nan)
                         if st.session_state.all_peaks:
-                            for pk_n in range(1, 6):  
+                            for pk_n in range(1, n_peaks + 1):  
                                 metrics_data[f'Peak {pk_n} ({ru})'].append(np.nan)
                                 metrics_data[f'Peak {pk_n} latency (ms)'].append(np.nan)
                                 metrics_data[f'Trough {pk_n} ({ru})'].append(np.nan)
                                 metrics_data[f'Trough {pk_n} latency (ms)'].append(np.nan)
                     else:
-                        for pk_n in range(1, 6):  
+                        for pk_n in range(1, n_peaks + 1):  
                             metrics_data[f'Peak {pk_n} latency (ms)'].append(np.nan)
                             metrics_data[f'Trough {pk_n} latency (ms)'].append(np.nan)
                             
@@ -315,9 +332,15 @@ def display_peaks_table(selected_dfs, selected_files, freqs, db_levels, return_t
     if return_nas:
         return metrics_table
     else:
-        return metrics_table.dropna()
+        # Only require the core columns; per-peak columns may legitimately be NaN when fewer peaks exist or are requested
+        optional_prefixes = ('Peak ', 'Trough ')
+        required_cols = [c for c in metrics_table.columns if not c.startswith(optional_prefixes)]
+        if n_peaks < 4:
+            required_cols = [c for c in required_cols if c != 'Amplitude Ratio (Peak1/Peak4)']
+        return metrics_table.dropna(subset=required_cols)
 
 def display_metrics_table_all_db(selected_dfs, selected_files, freqs, db_levels):
+    n_peaks = st.session_state.get('num_peaks', 5)
     output_pks = False if db_levels is None else True
 
     metrics_data = {'File Name': [], 'Frequency (Hz)': [], 'Sound amplitude (dB SPL)': [],} if output_pks else {'File Name': []}
@@ -335,13 +358,11 @@ def display_metrics_table_all_db(selected_dfs, selected_files, freqs, db_levels)
         metrics_data = {**metrics_data, f'Wave I amplitude (P1-T1) ({ru})': [], 'Latency to First Peak (ms)': [],
                         'Amplitude Ratio (Peak1/Peak4)': []}
         if st.session_state.all_peaks:
-            metrics_data = {**metrics_data,
-                            f'Peak 1 ({ru})': [], 'Peak 1 latency (ms)': [], f'Trough 1 ({ru})': [], 'Trough 1 latency (ms)': [],
-                            f'Peak 2 ({ru})': [], 'Peak 2 latency (ms)': [], f'Trough 2 ({ru})': [], 'Trough 2 latency (ms)': [],
-                            f'Peak 3 ({ru})': [], 'Peak 3 latency (ms)': [], f'Trough 3 ({ru})': [], 'Trough 3 latency (ms)': [],
-                            f'Peak 4 ({ru})': [], 'Peak 4 latency (ms)': [], f'Trough 4 ({ru})': [], 'Trough 4 latency (ms)': [],
-                            f'Peak 5 ({ru})': [], 'Peak 5 latency (ms)': [], f'Trough 5 ({ru})': [], 'Trough 5 latency (ms)': [],
-                            }
+            for peak_num in range(1, n_peaks + 1):
+                            metrics_data[f'Peak {peak_num} ({ru})'] = []
+                            metrics_data[f'Peak {peak_num} latency (ms)'] = []
+                            metrics_data[f'Trough {peak_num} ({ru})'] = []
+                            metrics_data[f'Trough {peak_num} latency (ms)'] = []
 
     for file_df, file_name in zip(selected_dfs, selected_files):
         for freq in freqs:
@@ -390,7 +411,7 @@ def display_metrics_table_all_db(selected_dfs, selected_files, freqs, db_levels)
                         metrics_data['Amplitude Ratio (Peak1/Peak4)'].append(amplitude_ratio)
 
                         if st.session_state.all_peaks:
-                            for pk_n in range(1, 6):  # Get up to 5 peaks for metrics
+                            for pk_n in range(1, n_peaks + 1):  # Get up to n_peaks peaks for metrics
                                 peak = highest_peaks[pk_n - 1] if pk_n <= len(highest_peaks) else np.nan
                                 trough = relevant_troughs[pk_n - 1] if pk_n <= len(relevant_troughs) else np.nan
                                 metrics_data[f'Peak {pk_n} ({ru})'].append(y_values[peak] if not np.isnan(peak) else np.nan)
@@ -416,6 +437,8 @@ def get_manual_peak_latency(file_name, freq, db, peak_column):
 
 def apply_manual_peak_edits(file_name, freq, db, x_values, y_values, highest_peaks, relevant_troughs):
     """Apply manual peak latency edits to calculated peaks"""
+    n_peaks = st.session_state.get('num_peaks', 5)
+
     if 'manual_peaks' not in st.session_state:
         return highest_peaks, relevant_troughs
     
@@ -426,18 +449,18 @@ def apply_manual_peak_edits(file_name, freq, db, x_values, y_values, highest_pea
     manual_edits = st.session_state.manual_peaks[waveform_key]
     
     if highest_peaks is not None and len(highest_peaks) > 0:
-        padded_peaks = np.full(5, np.nan)
+        padded_peaks = np.full(n_peaks, np.nan)
         padded_peaks[:len(highest_peaks)] = highest_peaks
         modified_peaks = padded_peaks.copy()
     else:
-        modified_peaks = np.full(5, np.nan)
+        modified_peaks = np.full(n_peaks, np.nan)
     
     if relevant_troughs is not None and len(relevant_troughs) > 0:
-        padded_troughs = np.full(5, np.nan)
+        padded_troughs = np.full(n_peaks, np.nan)
         padded_troughs[:len(relevant_troughs)] = relevant_troughs
         modified_troughs = padded_troughs.copy()
     else:
-        modified_troughs = np.full(5, np.nan)
+        modified_troughs = np.full(n_peaks, np.nan)
 
     for column, latency_ms in manual_edits.items():
         if 'Peak' in column and 'latency' in column and not pd.isna(latency_ms):
@@ -557,7 +580,7 @@ def calculate_and_plot_wave_exact(df, freq, db, peak_finding_model=default_peak_
 
         y_values_fpf = scaled_data
 
-        highest_peaks, relevant_troughs = peak_finding(y_values_fpf, peak_finding_model)
+        highest_peaks, relevant_troughs = peak_finding(y_values_fpf, peak_finding_model, running_avg_method=st.session_state.get('pk_bk_subtraction', False))
 
         # convert back to original x-coordinates:
         if len(highest_peaks) > 0:
