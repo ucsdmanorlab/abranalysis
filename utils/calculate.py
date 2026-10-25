@@ -332,7 +332,12 @@ def display_peaks_table(selected_dfs, selected_files, freqs, db_levels, return_t
     if return_nas:
         return metrics_table
     else:
-        return metrics_table.dropna()
+        # Only require the core columns; per-peak columns may legitimately be NaN when fewer peaks exist or are requested
+        optional_prefixes = ('Peak ', 'Trough ')
+        required_cols = [c for c in metrics_table.columns if not c.startswith(optional_prefixes)]
+        if n_peaks < 4:
+            required_cols = [c for c in required_cols if c != 'Amplitude Ratio (Peak1/Peak4)']
+        return metrics_table.dropna(subset=required_cols)
 
 def display_metrics_table_all_db(selected_dfs, selected_files, freqs, db_levels):
     n_peaks = st.session_state.get('num_peaks', 5)
