@@ -167,9 +167,27 @@ def get_current_plot_context():
     else:
         return "single_tuple"  # Default fallback
 
+@st.dialog("What's new in ABRA")
+def show_update_notice():
+    st.markdown(
+        "**UPDATE 10/25/2026:** New peak finding settings are available under "
+        "*Plotting and Analysis → Peak finding settings*: number of peaks to search for "
+        "(previously fixed at 5), choice of how peak I is detected, and optional background subtraction. "
+        "See the README on github for more info.\n\n"
+        "**Changed default:** peaks are now searched for in the first **8 ms** of the recording "
+        "(previously **10 ms**), which performed better on our test data. "
+        "To use the old behavior, set *Disallow peaks & troughs after time (ms)* to **10** in "
+        "*Plotting and Analysis → Peak finding settings*."
+    )
+    if st.button("Got it"):
+        st.session_state.update_notice_seen = True
+        st.rerun()
+
 def main():    
     if 'calibration_levels' not in st.session_state:
         st.session_state.calibration_levels = {}
+    if not st.session_state.get('update_notice_seen', False):
+        show_update_notice()
     
 
     # Streamlit UI

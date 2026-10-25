@@ -72,6 +72,14 @@ Click the thumbnail below to see an example of the .csv format:
 * Hover over the top right of a data table to download to csv
 ![download_csv](https://github.com/user-attachments/assets/62367808-e46d-43d7-84ff-e0b5e0639c13)
 
+* Customize peak finding under "Peak finding settings" (changing any of these clears previously calculated peaks and thresholds):
+  * Number of peaks: how many peaks to search for (1-10, default 5). Peak tables adjust to the chosen number. 
+  * Use pretrained model to detect peak I: on by default. Turn it off to instead search for peak I around a time you specify (ms).
+  * Disallow peaks & troughs after time (ms): ignore any peaks and troughs after this time (default 8 ms, max 10 ms). Earlier versions of ABRA used 10 ms; set this to 10 to reproduce the old behavior.
+  * Use background subtraction: subtracts a running average from the waveform before finding peaks, with an adjustable window (ms). 
+
+  Related options under "Advanced settings": "Peaks below threshold" finds peaks even at levels below the estimated threshold, and "ALL peaks/troughs in table" adds amplitude and latency columns for every peak and trough to the peak analysis table.
+
 * Edit peaks for individual waveforms: click "Edit peaks table", make edits, and click "Done editing"
   ![Untitled (1)](https://github.com/user-attachments/assets/df4ece33-2fc2-49b9-abfb-9d7bf4ab9c47)
 

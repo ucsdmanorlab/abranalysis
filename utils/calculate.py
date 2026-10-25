@@ -298,7 +298,7 @@ def display_peaks_table(selected_dfs, selected_files, freqs, db_levels, return_t
                         metrics_data['Amplitude Ratio (Peak1/Peak4)'].append(amplitude_ratio)
 
                         if st.session_state.all_peaks:
-                            for pk_n in range(1, n_peaks + 1):  # Get up to 5 peaks for metrics
+                            for pk_n in range(1, n_peaks + 1):  # Get up to n_peaks peaks for metrics
                                 peak = highest_peaks[pk_n - 1] if pk_n <= len(highest_peaks) else np.nan
                                 trough = relevant_troughs[pk_n - 1] if pk_n <= len(relevant_troughs) else np.nan
                                 metrics_data[f'Peak {pk_n} ({ru})'].append(y_values[peak] if not np.isnan(peak) else np.nan)
@@ -306,7 +306,7 @@ def display_peaks_table(selected_dfs, selected_files, freqs, db_levels, return_t
                                 metrics_data[f'Trough {pk_n} ({ru})'].append(y_values[trough] if not np.isnan(trough) else np.nan)
                                 metrics_data[f'Trough {pk_n} latency (ms)'].append(trough * (st.session_state.time_scale / len(y_values)))
                     else:
-                        for pk_n in range(1, n_peaks + 1):  # Get up to 5 peaks for metrics
+                        for pk_n in range(1, n_peaks + 1):  # Get up to n_peaks peaks for metrics
                             peak = highest_peaks[pk_n - 1] if pk_n <= len(highest_peaks) else np.nan
                             trough = relevant_troughs[pk_n - 1] if pk_n <= len(relevant_troughs) else np.nan
                             metrics_data[f'Peak {pk_n} latency (ms)'].append(peak * (st.session_state.time_scale / len(y_values)) if not np.isnan(peak) else np.nan)
@@ -411,7 +411,7 @@ def display_metrics_table_all_db(selected_dfs, selected_files, freqs, db_levels)
                         metrics_data['Amplitude Ratio (Peak1/Peak4)'].append(amplitude_ratio)
 
                         if st.session_state.all_peaks:
-                            for pk_n in range(1, n_peaks + 1):  # Get up to 5 peaks for metrics
+                            for pk_n in range(1, n_peaks + 1):  # Get up to n_peaks peaks for metrics
                                 peak = highest_peaks[pk_n - 1] if pk_n <= len(highest_peaks) else np.nan
                                 trough = relevant_troughs[pk_n - 1] if pk_n <= len(relevant_troughs) else np.nan
                                 metrics_data[f'Peak {pk_n} ({ru})'].append(y_values[peak] if not np.isnan(peak) else np.nan)
