@@ -74,6 +74,9 @@ def peak_finding(waveform, peak_finding_model, running_avg_method=False, *,
     smoothed_peaks, _ = find_peaks(smoothed_waveform[start_point:end_point], distance=n)
     smoothed_troughs, _ = find_peaks(-smoothed_waveform, distance=t)
 
+    if smoothed_peaks.size == 0:
+        return np.array([], dtype=int), np.array([], dtype=int)
+
     peaks_within_ms = np.array([])
     ms_cutoff = 0.25
     while len(peaks_within_ms) == 0:
@@ -92,8 +95,10 @@ def peak_finding(waveform, peak_finding_model, running_avg_method=False, *,
     # prominences = peak_prominences(smoothed_waveform, peaks)[0]
     # sorted_indices = np.argsort(prominences)
 
+    # Slice from the front: `[-0:]` would select everything when n_peaks == 1
+    n_extra = min(max(n_peaks - 1, 0), peaks.size)
     highest_smoothed_peaks = np.sort(np.concatenate(
-        ([pk1], peaks[sorted_indices[-min(n_peaks - 1, peaks.size):]])
+        ([pk1], peaks[sorted_indices[peaks.size - n_extra:]])
         )) 
     # sorted_indices = np.argsort(smoothed_waveform[smoothed_peaks+start_point])
     # highest_smoothed_peaks = np.sort(smoothed_peaks[sorted_indices[-5:]] + start_point)

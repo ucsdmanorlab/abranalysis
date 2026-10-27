@@ -68,9 +68,7 @@ class TestPeakFindingSynthetic:
         assert np.array_equal(base, other)
 
     @pytest.mark.parametrize("n_peaks", [
-        pytest.param(1, marks=pytest.mark.xfail(
-            strict=True, reason="Known bug: n_peaks=1 returns every peak because of a `[-0:]` slice")),
-        2, 3, 4, 5,
+        1, 2, 3, 4, 5,
     ])
     def test_never_returns_more_than_requested_peaks(self, make_abr, n_peaks):
         y, _, _ = make_abr()
@@ -135,11 +133,10 @@ class TestPeakFindingSynthetic:
         peaks, _ = peak_finding(scaled(y), None, n_peaks=4)
         assert len(peaks) == 4
 
-    @pytest.mark.xfail(strict=True, raises=TimeoutError,
-                       reason="Known bug: a waveform with no detectable peaks makes the pk1 search loop forever")
-    def test_waveform_without_peaks_does_not_hang(self):
+    def test_waveform_without_peaks_returns_nothing_instead_of_hanging(self):
         with time_limit(5):
-            peak_finding(np.zeros(244), None, n_peaks=5, **NO_MODEL_KWARGS)
+            peaks, troughs = peak_finding(np.zeros(244), None, n_peaks=5, **NO_MODEL_KWARGS)
+        assert len(peaks) == 0 and len(troughs) == 0
 
 
 @pytest.mark.slow

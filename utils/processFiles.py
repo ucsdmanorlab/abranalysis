@@ -287,6 +287,9 @@ def process_uploaded_files_cached(uploaded_files, is_rz_file, click, is_atten):
             if 'Freq(Hz)' not in df.columns:
                 df['Freq(Hz)'] = 0.0
                 df = df[['Freq(Hz)'] + [col for col in df.columns if col != 'Freq(Hz)']] # moves freq col to beginning
+
+        else:
+            raise ValueError(f"Unsupported file type: {file.name}. Please upload .arf, .csv, .tsv or .asc files.")
         df.name = file.name
         dfs.append(df)
        
