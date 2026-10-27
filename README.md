@@ -89,4 +89,11 @@ Click the thumbnail below to see an example of the .csv format:
 * Clear manual edits using the Manual Edits Management toolbar
   ![clear_manuals](https://github.com/user-attachments/assets/9bcfe194-7ca4-498b-8c54-cd929a46c9c7)
 
+## Testing
 
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+See [tests/README.md](tests/README.md) for what is tested, and how to update the golden baselines when a peak/threshold algorithm change is intentional.
