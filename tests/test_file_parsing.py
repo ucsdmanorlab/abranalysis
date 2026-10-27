@@ -11,6 +11,7 @@ from conftest import DEMO_DIR, UploadedFile
 from utils.processFiles import (
     CFTSread,
     arfread,
+    is_dpoae_group,
     clear_calculation_cache_for_files,
     process_uploaded_files_cached,
 )
@@ -165,3 +166,43 @@ def test_clear_calculation_cache_only_removes_matching_files(session_state):
 
 def test_clear_calculation_cache_without_caches_is_a_noop(session_state):
     clear_calculation_cache_for_files(["a.arf"])
+
+
+def _group(protocol, var1, var2, recs):
+    return {"sgfname1": protocol, "sgfname2": "", "VarName1": var1, "VarName2": var2, "recs": recs}
+
+
+def _rec(var1, var2, n, dur):
+    return {"Var1": var1, "Var2": var2, "data": [1e-6] * n, "dur_ms": dur}
+
+
+def test_is_dpoae_group_by_protocol_name_or_variables():
+    assert is_dpoae_group(_group("DPOAE1A_IO_8", "Level", "AudFreq", []))
+    assert is_dpoae_group(_group("custom", "Level", "AudFreq", []))
+    assert not is_dpoae_group(_group("zCS_LC TonePip upd", "Freq", "Level", []))
+    assert not is_dpoae_group(_group("", "Level", "", []))
+
+
+def test_upload_ignores_dpoae_groups_in_arf(tmp_path, session_state, monkeypatch):
+    groups = [
+        _group("DPOAE1A_IO_8", "Level", "AudFreq", [_rec(30.0, 8000.0, 2048, 97656.25)]),
+        _group("zCS_LC TonePip", "Freq", "Level", [_rec(8000.0, 20.0, 244, 10.0), _rec(8000.0, 30.0, 244, 10.0)]),
+    ]
+    monkeypatch.setattr("utils.processFiles.arfread", lambda *a, **k: {"groups": groups})
+    path = tmp_path / "mixed.arf"
+    path.write_bytes(b"x")
+    dfs, durations = process_uploaded_files_cached([UploadedFile(path)], "RZ", False, False)
+    df = dfs[0]
+    assert list(df["Freq(Hz)"]) == [8000.0, 8000.0]
+    assert list(df["Level(dB)"]) == [20.0, 30.0]
+    assert df.shape[1] == 2 + 244
+    assert durations == 10.0
+
+
+def test_upload_arf_with_only_dpoae_gives_clear_error(tmp_path, session_state, monkeypatch):
+    groups = [_group("DPOAE1A_IO_8", "Level", "AudFreq", [_rec(30.0, 8000.0, 2048, 97656.25)])]
+    monkeypatch.setattr("utils.processFiles.arfread", lambda *a, **k: {"groups": groups})
+    path = tmp_path / "dpoae_only.arf"
+    path.write_bytes(b"x")
+    with pytest.raises(ValueError, match="No ABR"):
+        process_uploaded_files_cached([UploadedFile(path)], "RZ", False, False)

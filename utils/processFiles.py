@@ -48,6 +48,11 @@ def CFTSread(PATH):
         df = pd.DataFrame(rows)
     return duration_ms, df
 
+def is_dpoae_group(group):
+    """True for non-ABR groups (DPOAE) that BioSig can store in the same .arf file."""
+    protocols = f"{group.get('sgfname1', '')} {group.get('sgfname2', '')}".lower()
+    return 'dpoae' in protocols or 'AudFreq' in (group.get('VarName1'), group.get('VarName2'))
+
 def arfread(PATH, **kwargs):
     def get_str(data):
         # return string up until null character only
@@ -251,6 +256,8 @@ def process_uploaded_files_cached(uploaded_files, is_rz_file, click, is_atten):
             rows = []
 
             for group in data['groups']:
+                if is_dpoae_group(group):
+                    continue
                 for rec in group['recs']:
                     if not click:
                         freq = rec['Var1']
@@ -270,6 +277,8 @@ def process_uploaded_files_cached(uploaded_files, is_rz_file, click, is_atten):
                         rows.append(row)
                     duration = rec['dur_ms']
 
+            if not rows:
+                raise ValueError(f"No ABR recordings found in {file.name} (only DPOAE or empty groups).")
             df = pd.DataFrame(rows)
 
         elif file.name.endswith((".asc", ".tsv")):
