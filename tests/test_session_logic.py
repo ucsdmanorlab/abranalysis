@@ -58,7 +58,9 @@ class TestGetSelectedData:
     def test_all_files_selected_by_default(self, session_state):
         session_state.processed_dfs = self._dfs(["a.arf", "b.arf"])
         files, dfs = get_selected_data()
-        assert [f.split("/")[-1] for f in files] == ["a.arf", "b.arf"]
+        from pathlib import Path
+
+        assert [Path(f).name for f in files] == ["a.arf", "b.arf"]
         assert len(dfs) == 2
 
     def test_unchecked_files_are_excluded(self, session_state):
