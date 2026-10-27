@@ -26,21 +26,33 @@ def interpolate_and_smooth(y, target_length=244):
 
     return pd.Series(final)
 
-def peak_finding(waveform, peak_finding_model, running_avg_method=False):
-    n_peaks = st.session_state.get('num_peaks', 5)
-    if st.session_state.get('pretrained_pk1', True):
+def peak_finding(waveform, peak_finding_model, running_avg_method=False, *,
+                 n_peaks=None, pretrained_pk1=None, pk1_anchor=None, max_pk_time=None, bk_window=None):
+    # Any setting left as None falls back to the value in the Streamlit session.
+    if n_peaks is None:
+        n_peaks = st.session_state.get('num_peaks', 5)
+    if pretrained_pk1 is None:
+        pretrained_pk1 = st.session_state.get('pretrained_pk1', True)
+    if pk1_anchor is None:
+        pk1_anchor = st.session_state.get('pk1_anchor', 1.0)
+    if max_pk_time is None:
+        max_pk_time = st.session_state.get('max_pk_time', 10.0)
+    if bk_window is None:
+        bk_window = st.session_state.get('bk_window', 0.2)
+
+    if pretrained_pk1:
         waveform_torch = torch.tensor(waveform, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
     
         # Get prediction from model
         pk_outputs = peak_finding_model(waveform_torch)
         prediction = int(round(pk_outputs.detach().numpy()[0][0], 0))
     else:
-        prediction = int(round(len(waveform) * st.session_state.get('pk1_anchor', 1.0)/ 10, 0))
+        prediction = int(round(len(waveform) * pk1_anchor / 10, 0))
     # Apply Gaussian smoothing
     smoothed_waveform = gaussian_filter1d(waveform, sigma=1.0)
     if running_avg_method:
         print("Running average method is enabled for background subtraction.")
-        avg_window = min(len(waveform), max(1, int(round(st.session_state.get('bk_window', 0.2) * len(waveform)/10, 0))))
+        avg_window = min(len(waveform), max(1, int(round(bk_window * len(waveform)/10, 0))))
         print(f"Background subtraction window size: {avg_window}")
         print(len(smoothed_waveform))
         left_padding = avg_window // 2
@@ -60,7 +72,7 @@ def peak_finding(waveform, peak_finding_model, running_avg_method=False):
     # Find peaks and troughs
     n, t, window = 16, 7, 10
     start_point = max(0, prediction - window)
-    end_point = min(len(smoothed_waveform), int(round(st.session_state.get('max_pk_time', 10.0) * len(smoothed_waveform) / 10,1)))
+    end_point = min(len(smoothed_waveform), int(round(max_pk_time * len(smoothed_waveform) / 10,1)))
 
     smoothed_peaks, _ = find_peaks(smoothed_waveform[start_point:end_point], distance=n)
     smoothed_troughs, _ = find_peaks(-smoothed_waveform, distance=t)
@@ -122,9 +134,25 @@ def calculate_hearing_threshold(df, freq):
         return st.session_state.calculated_thresholds[cache_key]
     
     atten = st.session_state.get('atten', False)
+    rbu_thresh = compute_hearing_threshold(
+        df, freq,
+        atten=atten,
+        time_scale=st.session_state.time_scale,
+        multiply_y_factor=st.session_state.multiply_y_factor,
+        units=st.session_state.units,
+        calibration_level=st.session_state.calibration_levels[freq] if atten else None,
+    )
+    st.session_state.calculated_thresholds[cache_key] = rbu_thresh
+
+    return rbu_thresh
+
+def compute_hearing_threshold(df, freq, *, atten, time_scale, multiply_y_factor, units,
+                              calibration_level=None, thresholding_model=None):
+    """Threshold (dB) for one frequency, from explicit settings (no Streamlit session access)."""
     db_column = 'Level(dB)' if not atten else 'PostAtten(dB)'
 
-    thresholding_model = default_thresholding_model()
+    if thresholding_model is None:
+        thresholding_model = default_thresholding_model()
     
     # Filter DataFrame to include only data for the specified frequency
     df_filtered = df[df['Freq(Hz)'] == freq]
@@ -141,12 +169,12 @@ def calculate_hearing_threshold(df, freq):
             final = pd.to_numeric(final, errors='coerce')
             final = np.array(final, dtype=np.float64)
 
-            tenms = int((10/st.session_state.time_scale)*len(final))
+            tenms = int((10/time_scale)*len(final))
             final = interpolate_and_smooth(final[:tenms], 244)
             # final = interpolate_and_smooth(final[:244])
-            final *= st.session_state.multiply_y_factor
+            final *= multiply_y_factor
 
-            if st.session_state.units == 'Nanovolts':
+            if units == 'Nanovolts':
                 final /= 1000
 
             waves.append(final)
@@ -163,8 +191,7 @@ def calculate_hearing_threshold(df, freq):
 
     if db_column == 'PostAtten(dB)':
         db_levels = np.array(db_levels)
-        calibration_level = np.full(len(db_levels), st.session_state.calibration_levels[freq])
-        db_levels = calibration_level - db_levels
+        db_levels = np.full(len(db_levels), calibration_level) - db_levels
 
     previous_prediction = None
 
@@ -191,7 +218,6 @@ def calculate_hearing_threshold(df, freq):
     #     else:
     #         lowest_db = d
     #         previous_prediction = p
-    st.session_state.calculated_thresholds[cache_key] = rbu_thresh
 
     return rbu_thresh
 
