@@ -62,11 +62,11 @@ def test_first_run_records_nothing_and_does_not_warn(session_state):
 def test_changed_setting_warns_and_clears_calculated_values(session_state):
     fake = _FakeSt(session_state)
     ns = _load_settings_functions(fake)
+    session_state["time_scale"] = 5.0
+    ns["check_settings_and_clear_cache"]()
     session_state["time_scale"] = 10.0
     session_state["calculated_thresholds"] = {"x": 1}
     session_state["calculated_waves"] = {"y": 2}
-    # Mirrors how the app stores the previous settings after each check.
-    session_state["previous_calc_settings"] = {"time_scale": 5.0}
     ns["check_settings_and_clear_cache"]()
     assert any("Settings have changed" in w for w in fake.warnings)
     assert not session_state["calculated_thresholds"]
