@@ -3,3 +3,6 @@ test.py
 environment.yml
 **.DS_Store
 .DS_Store
+.pytest_cache/
+.coverage
+htmlcov/

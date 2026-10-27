@@ -6,6 +6,7 @@ numpy>=1.26.3,<2.0
 scipy
 backports.tempfile==1.0
 scikit-fda
+multimethod<2.1  # scikit-fda 0.10.1 fails to import with multimethod 2.1 (metaclass conflict)
 kneed
 torch
 keras==3.3.3
