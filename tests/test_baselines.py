@@ -37,7 +37,7 @@ def test_thresholds_match_baseline(key, load_demo, apply_settings, check):
     apply_settings("default")
     df, _ = load_demo(DEMO_FILES[key])
     thresholds = {str(freq): calculate_hearing_threshold(df, freq) for freq in _frequencies(df)}
-    check(f"thresholds_{key}", thresholds)
+    check(f"thresholds_{key}", thresholds, rtol=0, atol=0)
 
 
 @pytest.mark.parametrize("preset", ["default", "anchor_pk1", "bk_subtraction"])
