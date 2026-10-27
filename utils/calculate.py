@@ -51,10 +51,7 @@ def peak_finding(waveform, peak_finding_model, running_avg_method=False, *,
     # Apply Gaussian smoothing
     smoothed_waveform = gaussian_filter1d(waveform, sigma=1.0)
     if running_avg_method:
-        print("Running average method is enabled for background subtraction.")
         avg_window = min(len(waveform), max(1, int(round(bk_window * len(waveform)/10, 0))))
-        print(f"Background subtraction window size: {avg_window}")
-        print(len(smoothed_waveform))
         left_padding = avg_window // 2
         right_padding = avg_window - left_padding - 1
         padded_waveform = np.pad(
