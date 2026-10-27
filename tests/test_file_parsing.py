@@ -148,8 +148,6 @@ def test_upload_pipeline_handles_multiple_files(session_state):
     assert [d.name for d in dfs] == ["55.csv", "80.csv"]
 
 
-@pytest.mark.xfail(strict=True, raises=UnboundLocalError,
-                   reason="Unsupported file types crash with UnboundLocalError instead of a clear message")
 def test_upload_pipeline_unsupported_extension_gives_clear_error(tmp_path, session_state):
     path = tmp_path / "notes.txt"
     path.write_text("hello")
