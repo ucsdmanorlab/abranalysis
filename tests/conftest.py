@@ -35,6 +35,13 @@ DEFAULT_SETTINGS = {
     "max_pk_time": 8.0,
     "pk_bk_subtraction": False,
     "bk_window": 1.0,
+    "all_peaks": False,
+    "show_legend": True,
+    "serif_font": False,
+    "auto_y": True,
+    "y_min": -5.0,
+    "y_max": 5.0,
+    "vert_space": 10.0,
 }
 
 # Named settings combinations used for golden baselines. Always explicit, so a
