@@ -194,7 +194,7 @@ def main():
     st.title("ABRA")
     tab1, tab2 = st.sidebar.tabs(["Data", "Plotting and Analysis"])
     
-    uploaded_files = tab1.file_uploader("**Upload files to analyze:**", type=["csv", "arf", "asc", "tsv"], accept_multiple_files=True)
+    uploaded_files = tab1.file_uploader("**Upload files to analyze:**", type=["csv", "arf", "awf", "asc", "tsv"], accept_multiple_files=True)
     tab1.markdown("<small><i>Note: All uploaded files are processed in memory only and are not retained by the application.</i></small>", unsafe_allow_html=True)
     # Inputs:
     inputs = tab1.expander("Input data properties", expanded=True)
@@ -202,10 +202,10 @@ def main():
     units = inputs.selectbox("Units used in collection", options=['Microvolts', 'Nanovolts'], index=0, key="units")
     # baseline_level_str = inputs.text_input("Set Baseline Level", "0.0")
     # baseline_level = float(baseline_level_str)
-    is_click = inputs.radio("Tone or click? (for .arf files)", ("Tone", "Click"), horizontal=True)
+    is_click = inputs.radio("Tone or click? (for .arf/.awf files)", ("Tone", "Click"), horizontal=True)
     click = True if is_click == "Click" else False
     # is_rz_file = inputs.radio("BioSig version (.arf files):", ("RZ", "RP"), horizontal=True, index=0) 
-    is_atten = inputs.toggle("dB saved as attenuation (.arf only)", value=False, key="atten")
+    is_atten = inputs.toggle("dB saved as attenuation (.arf/.awf only)", value=False, key="atten")
 
     if uploaded_files:
         validation_errors = []
