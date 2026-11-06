@@ -233,19 +233,17 @@ def main():
 
         if is_atten:
             cal_levels = tab1.expander("Calibration dB levels", expanded=True)
-            for file_path in selected_files: 
-                file_name = os.path.basename(file_path)
-                for hz in distinct_freqs:
-                    key = hz
-                    if key not in st.session_state.calibration_levels:
-                        st.session_state.calibration_levels[key] = 100.0
-                    st.session_state.calibration_levels[key] = cal_levels.number_input(
-                        f"Calibration dB for {hz} Hz",
-                        value=st.session_state.calibration_levels[key],
-                        step=5.0,
-                        format="%0.1f",
-                        key=f"cal_{hz}"
-                    )
+            for hz in distinct_freqs:
+                key = hz
+                if key not in st.session_state.calibration_levels:
+                    st.session_state.calibration_levels[key] = 100.0
+                st.session_state.calibration_levels[key] = cal_levels.number_input(
+                    f"Calibration dB for {hz} Hz",
+                    value=st.session_state.calibration_levels[key],
+                    step=5.0,
+                    format="%0.1f",
+                    key=f"cal_{hz}"
+                )
             # TODO: add option to set legend to show attenuation
             #atten_legend = cal_levels.toggle("Use attenuation levels in plot legends", value=False)
 

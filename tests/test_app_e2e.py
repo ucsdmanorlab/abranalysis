@@ -82,3 +82,27 @@ def test_unchanged_settings_keep_calculated_values(session_state):
     ns["check_settings_and_clear_cache"]()
     assert session_state["calculated_thresholds"] == {"x": 1}
     assert fake.warnings == []
+
+
+def test_attenuation_toggle_with_multiple_files_has_no_duplicate_keys(monkeypatch, tmp_path):
+    """Regression: calibration inputs were created once per selected file."""
+    import pandas as pd
+    from streamlit.delta_generator import DeltaGenerator
+
+    from conftest import UploadedFile
+
+    paths = []
+    for i, freq in enumerate((8000, 16000)):
+        df = pd.DataFrame(
+            [[freq, atten] + [0.0] * 244 for atten in (60, 70, 80)],
+            columns=["Freq(Hz)", "PostAtten(dB)"] + [str(n) for n in range(244)],
+        )
+        paths.append(tmp_path / f"f{i}.csv")
+        df.to_csv(paths[-1], index=False)
+    monkeypatch.setattr(
+        DeltaGenerator, "file_uploader", lambda self, *a, **k: [UploadedFile(p) for p in paths]
+    )
+    at = AppTest.from_file("ABRA.py", default_timeout=120).run()
+    at.toggle(key="atten").set_value(True).run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert {n.key for n in at.number_input if str(n.key).startswith("cal_")} == {"cal_8000", "cal_16000"}
