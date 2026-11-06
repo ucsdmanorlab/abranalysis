@@ -69,8 +69,29 @@ Click the thumbnail below to see an example of the .csv format:
 
 ### Optional usage:
 
-* Hover over the top right of a data table to download to csv
-![download_csv](https://github.com/user-attachments/assets/62367808-e46d-43d7-84ff-e0b5e0639c13)
+* Use the **Download thresholds (CSV with settings)** or **Download peak
+  analyses (CSV with settings)** button to include analysis settings above the
+  table. The Streamlit table toolbar also has a download option, but that
+  exports only the table, without settings or manual-edit indicators. Scripts
+  reading the settings CSV must skip the settings section and blank line to
+  reach the table header. Settings CSV files use UTF-8 with a byte-order marker
+  to help Excel recognize symbols such as `μV`.
+
+  Settings include the **ABRA code version**. In a Git
+  checkout, this identifies the nearest tag, commits since that tag, and commit
+  hash; `-dirty` means tracked files had uncommitted changes. A hash alone may
+  appear if no tags are available. If Git information is unavailable, the
+  header says so instead of guessing a release. Both exports record the input
+  time scale, units, Y multiplier, and whether levels are attenuation; the
+  threshold table also includes the per-frequency calibration level when used.
+  Peak tables also include the
+  peak I method, search time when applicable, number of peaks, cutoff time,
+  background subtraction and its window when enabled, and whether peaks below
+  threshold and all-peak output were requested. The settings describe the automatic analysis at
+  table generation. Exported rows flag applied manual peak edits and manual
+  thresholds separately, including edits retained when settings change. Peak
+  tables identify when a manual threshold was used even if they do not include
+  the threshold value.
 
 * Customize peak finding under "Peak finding settings" (changing any of these clears previously calculated peaks and thresholds):
   * Number of peaks: how many peaks to search for (1-10, default 5). Peak tables adjust to the chosen number. 

@@ -106,3 +106,118 @@ def test_attenuation_toggle_with_multiple_files_has_no_duplicate_keys(monkeypatc
     at.toggle(key="atten").set_value(True).run()
     assert not at.exception, [e.value for e in at.exception]
     assert {n.key for n in at.number_input if str(n.key).startswith("cal_")} == {"cal_8000", "cal_16000"}
+
+
+def test_tables_offer_downloads_with_analysis_settings(monkeypatch):
+    import csv
+    import io
+    import streamlit as st
+
+    from streamlit.delta_generator import DeltaGenerator
+    from conftest import DEMO_DIR, UploadedFile
+
+    downloads = {}
+    download_button = st.download_button
+
+    def record_download(label, data, **kwargs):
+        downloads[kwargs["key"]] = data
+        return download_button(label, data, **kwargs)
+
+    monkeypatch.setattr(st, "download_button", record_download)
+    monkeypatch.setattr(
+        DeltaGenerator, "file_uploader",
+        lambda self, *args, **kwargs: [UploadedFile(DEMO_DIR / "20250616 WT.arf")],
+    )
+    at = AppTest.from_file("ABRA.py", default_timeout=120).run()
+    next(button for button in at.button if button.label == "Return all thresholds").click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    table = at.session_state["threshold_table"]
+    assert len(table) > 0
+    assert table.attrs["analysis_metadata"]["ABRA code version"]
+    assert table.attrs["analysis_metadata"]["Input units"] == "Microvolts"
+    assert "ABRA code version" not in table.columns
+    assert any(d.proto.label == "Download thresholds (CSV with settings)" for d in at.get("download_button"))
+    assert downloads["download_threshold_settings"].startswith(b"\xef\xbb\xbf")
+    threshold_rows = list(csv.reader(io.StringIO(downloads["download_threshold_settings"].decode("utf-8-sig"))))
+    assert threshold_rows[0][0] == "ABRA code version"
+    assert threshold_rows[threshold_rows.index([]) + 1] == list(table.columns) + ["Manual threshold edit"]
+
+    next(button for button in at.button if button.label == "Return all peak analyses").click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    peak_table = at.get("arrow_data_frame")[0].value
+    assert len(peak_table) > 0
+    assert "Peak I method" not in peak_table.columns
+    assert at.session_state["current_table"].attrs["analysis_metadata"]["Peak I method"] == "Pretrained model"
+    assert any(d.proto.label == "Download peak analyses (CSV with settings)" for d in at.get("download_button"))
+    peak_rows = list(csv.reader(io.StringIO(downloads["download_all_peaks_settings"].decode("utf-8-sig"))))
+    assert ["Peak I method", "Pretrained model"] in peak_rows
+    assert peak_rows[peak_rows.index([]) + 1] == list(peak_table.columns) + ["Manual peak edit", "Manual threshold used"]
+
+
+def test_threshold_download_records_visible_editor_change(monkeypatch):
+    import csv
+    import io
+    import streamlit as st
+
+    from streamlit.delta_generator import DeltaGenerator
+    from conftest import DEMO_DIR, UploadedFile
+
+    downloads = {}
+    download_button = st.download_button
+
+    def record_download(label, data, **kwargs):
+        downloads[kwargs["key"]] = data
+        return download_button(label, data, **kwargs)
+
+    def edit_threshold(table, **kwargs):
+        edited = table.copy()
+        edited.loc[edited.index[0], "Estimated Threshold"] = 42.0
+        return edited
+
+    monkeypatch.setattr(st, "download_button", record_download)
+    monkeypatch.setattr(st, "data_editor", edit_threshold)
+    monkeypatch.setattr(
+        DeltaGenerator, "file_uploader",
+        lambda self, *args, **kwargs: [UploadedFile(DEMO_DIR / "20250616 WT.arf")],
+    )
+    at = AppTest.from_file("ABRA.py", default_timeout=120).run()
+    next(button for button in at.button if button.label == "Return all thresholds").click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    rows = list(csv.reader(io.StringIO(downloads["download_threshold_settings"].decode("utf-8-sig"))))
+    data_rows = rows[rows.index([]) + 1:]
+    data = [dict(zip(data_rows[0], row)) for row in data_rows[1:]]
+    assert float(data[0]["Estimated Threshold"]) == 42.0
+    assert data[0]["Manual threshold edit"] == "True"
+    assert data[1]["Manual threshold edit"] == "False"
+
+
+def test_plot_peak_table_offers_settings_download(monkeypatch):
+    import io
+    import csv
+    import plotly.graph_objects as go
+    import streamlit as st
+    from streamlit.delta_generator import DeltaGenerator
+    from conftest import DEMO_DIR, UploadedFile
+    import utils.plotting as plotting
+
+    downloads = {}
+    download_button = st.download_button
+
+    def record_download(label, data, **kwargs):
+        downloads[kwargs["key"]] = data
+        return download_button(label, data, **kwargs)
+
+    monkeypatch.setattr(st, "download_button", record_download)
+    monkeypatch.setattr(
+        DeltaGenerator, "file_uploader",
+        lambda self, *args, **kwargs: [UploadedFile(DEMO_DIR / "20250616 WT.arf")],
+    )
+    monkeypatch.setattr(plotting, "plot_waves_single_frequency", lambda *args, **kwargs: [go.Figure()])
+    monkeypatch.setattr(go.Figure, "write_image", lambda self, file, **kwargs: file.write(b"pdf"))
+    at = AppTest.from_file("ABRA.py", default_timeout=120).run()
+    next(button for button in at.button if button.label == "Single frequency").click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert "download_peaks_settings" in downloads
+    rows = list(csv.reader(io.StringIO(downloads["download_peaks_settings"].decode("utf-8-sig"))))
+    assert ["Peak I method", "Pretrained model"] in rows
+    assert "Manual peak edit" in rows[rows.index([]) + 1]
