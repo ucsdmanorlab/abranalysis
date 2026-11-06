@@ -11,6 +11,7 @@ from conftest import DEMO_DIR, UploadedFile
 from utils.processFiles import (
     CFTSread,
     arfread,
+    awfread,
     clear_calculation_cache_for_files,
     process_uploaded_files_cached,
 )
@@ -165,3 +166,91 @@ def test_clear_calculation_cache_only_removes_matching_files(session_state):
 
 def test_clear_calculation_cache_without_caches_is_a_noop(session_state):
     clear_calculation_cache_for_files(["a.arf"])
+
+
+def _write_awf(path, recs, rz=True):
+    """Build a minimal .awf: header, 30 record headers, then the waveforms."""
+    import struct
+    import time
+
+    def s(text, n):
+        return text.encode().ljust(n, b"\x00")
+
+    blob = struct.pack("<hffhhhhhhhhh", len(recs), 1e-6, -1e-6, 1, 10, 0, 1, 1, 0, 0, 0, 0)
+    ts = int(time.time()) - 1000
+    for i in range(30):
+        rec = recs[i] if i < len(recs) else None
+        t = struct.pack("<q", ts) if rz else struct.pack("<i", ts)
+        blob += struct.pack("<hh", 1, 0) + t + struct.pack("<hhbbh", 1, 1, 1, 0, len(rec["data"]) if rec else 0)
+        blob += struct.pack("<fff", 0.0, rec["dur"] if rec else 0.0, 0.0) + struct.pack("<ffhhh", 0, 0, 0, 0, 0)
+        blob += (struct.pack("<qq", ts, ts) if rz else struct.pack("<ii", ts, ts))
+        blob += struct.pack("<10f", *(rec["vars"] if rec else [0.0] * 10))
+        blob += b"\x00" * (10 * 36)
+        blob += struct.pack("<hhh", 1, 0, 1) + s("ID1", 16) + s("", 32) + s("memo", 50)
+        blob += (struct.pack("<qq", ts, ts) if rz else struct.pack("<ii", ts, ts))
+        blob += s("proto", 100) + s("", 100)
+        blob += b"".join(s(n, 15) for n in ["Freq", "Level"] + [""] * 8) + b"".join(s("", 5) for _ in range(10))
+        blob += struct.pack("<f", 40.0) + b"\x00" * (4 + 2 + 4 + 92)
+        blob += struct.pack("<h", (20 + i) if rec else 0) + b"\x00" * (18 + 5 * 24 + 108)
+    for rec in recs:
+        blob += struct.pack(f"<{len(rec['data'])}f", *rec["data"])
+    path.write_bytes(blob)
+
+
+@pytest.mark.parametrize("rz", [True, False])
+def test_awfread_roundtrip(tmp_path, rz):
+    recs = [
+        {"vars": [8000.0, 90.0] + [0.0] * 8, "dur": 10.0, "data": [1e-6, 2e-6, 3e-6]},
+        {"vars": [8000.0, 80.0] + [0.0] * 8, "dur": 10.0, "data": [4e-6, 5e-6, 6e-6]},
+    ]
+    path = tmp_path / "x.awf"
+    _write_awf(path, recs, rz=rz)
+    out = awfread(str(path))
+    assert [r["Var1"] for r in out["recs"]] == [8000.0, 8000.0]
+    assert [r["Var2"] for r in out["recs"]] == [90.0, 80.0]
+    assert out["recs"][1]["data"].tolist() == pytest.approx([4e-6, 5e-6, 6e-6])
+    assert out["recs"][0]["VarName1"] == "Freq"
+    assert out["recs"][0]["dur_ms"] == pytest.approx(10.0)
+
+
+def test_awfread_rejects_truncated_file(tmp_path):
+    recs = [{"vars": [8000.0, 90.0] + [0.0] * 8, "dur": 10.0, "data": [1e-6] * 5}]
+    path = tmp_path / "x.awf"
+    _write_awf(path, recs)
+    path.write_bytes(path.read_bytes()[:-8])
+    with pytest.raises(ValueError, match="not a valid"):
+        awfread(str(path))
+
+
+def test_awfread_rejects_garbage(tmp_path):
+    path = tmp_path / "x.awf"
+    path.write_bytes(b"not an awf")
+    with pytest.raises(ValueError, match="not a valid"):
+        awfread(str(path))
+
+
+def test_upload_awf_gives_abra_dataframe(tmp_path, session_state):
+    recs = [
+        {"vars": [8000.0, 90.0] + [0.0] * 8, "dur": 10.0, "data": [1e-6] * 244},
+        {"vars": [8000.0, 80.0] + [0.0] * 8, "dur": 10.0, "data": [2e-6] * 244},
+    ]
+    path = tmp_path / "mouse_8kHz.awf"
+    _write_awf(path, recs)
+    dfs, duration = process_uploaded_files_cached([UploadedFile(path)], "RZ", False, False)
+    df = dfs[0]
+    assert df.name == "mouse_8kHz.awf"
+    assert list(df["Freq(Hz)"]) == [8000.0, 8000.0]
+    assert list(df["Level(dB)"]) == [90.0, 80.0]
+    assert df.shape[1] == 2 + 244
+    assert df["0"].tolist() == pytest.approx([1.0, 2.0])  # volts -> microvolts
+    assert duration == pytest.approx(10.0)
+
+
+def test_upload_awf_attenuation_and_click_modes(tmp_path, session_state):
+    recs = [{"vars": [30.0, 0.0] + [0.0] * 8, "dur": 10.0, "data": [1e-6] * 244}]
+    path = tmp_path / "click.awf"
+    _write_awf(path, recs)
+    dfs, _ = process_uploaded_files_cached([UploadedFile(path)], "RZ", True, True)
+    assert list(dfs[0]["Freq(Hz)"]) == ["Click"]
+    assert list(dfs[0]["PostAtten(dB)"]) == [30.0]
+

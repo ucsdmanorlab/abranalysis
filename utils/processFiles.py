@@ -4,6 +4,7 @@ import os
 import tempfile
 import numpy as np
 import struct
+import time
 from .ui import * 
 
 def CFTSread(PATH):
@@ -204,6 +205,87 @@ def arfread(PATH, **kwargs):
 
     return data
 
+def awfread(PATH):
+    """Read a TDT BioSig worksheet (.awf) file.
+
+    Ported from TDT's awfread.m. An .awf holds a header, 30 fixed-size record
+    headers, then the waveform of every record that has data. Returns
+    {'RecHead': {...}, 'recs': [{'Var1'..'Var10', 'VarName1'.., 'data', 'dur_ms', ...}]}.
+    Waveforms are in volts, like .arf data.
+    """
+    def get_str(raw):
+        ind = raw.find(b'\x00')
+        return (raw[:ind] if ind >= 0 else raw).decode('latin-1').strip()
+
+    try:
+        with open(PATH, 'rb') as fid:
+            def rd(fmt):
+                return struct.unpack('<' + fmt, fid.read(struct.calcsize('<' + fmt)))
+
+            rec_head = {'nens': rd('h')[0]}
+            rd('ff')    # ymax, ymin
+            rd('hhhhh') # autoscale, size, gridsize, showgrid, showcur
+            rd('hhhh')  # text margins
+
+            headers = []
+            is_rz = False
+            for x in range(30):
+                h = {}
+                h['recn'], h['grpid'] = rd('hh')
+                if x == 0:
+                    # RZ files store 64-bit timestamps, RP files 32-bit; RZ ones are valid epoch seconds
+                    first_t = struct.unpack('<q', fid.read(8))[0]
+                    fid.seek(-8, 1)
+                    is_rz = 0 < first_t < time.time()
+                rd('q' if is_rz else 'i')   # grp_t
+                rd('hh')                    # newgrp, sgi
+                rd('bb')                    # chan, rtype
+                h['npts'] = rd('h')[0]
+                h['osdel'], h['dur'], h['srate'] = rd('fff')
+                rd('ff')                    # arthresh, gain
+                rd('hhh')                   # accouple, navgs, narts
+                rd('qq' if is_rz else 'ii') # beg_t, end_t
+                h['vars'] = rd('10f')
+                fid.seek(10 * (4 + 4 + 20 + 8), 1)  # cursors
+                rd('hhh')                   # grpn, frecn, nrecs
+                h['ID'] = get_str(fid.read(16))
+                fid.seek(32, 1)             # ref1, ref2
+                h['memo'] = get_str(fid.read(50))
+                rd('qq' if is_rz else 'ii') # beg_t, end_t
+                h['sgfname1'] = get_str(fid.read(100))
+                h['sgfname2'] = get_str(fid.read(100))
+                h['VarNames'] = [get_str(fid.read(15)) for _ in range(10)]
+                h['VarUnits'] = [get_str(fid.read(5)) for _ in range(10)]
+                h['SampPer_us'] = rd('f')[0]
+                fid.seek(4 + 2 + 4 + 92, 1) # cc_t, version, postproc, dump
+                h['bid'] = rd('h')[0]
+                fid.seek(2 + 2 + 2 + 2 + 2 + 4 + 4, 1)  # comp, x, y, traceCM, tokenCM, col, curcol
+                fid.seek(5 * (6 * 2 + 12), 1)           # blurbs
+                fid.seek(4 + 4 + 100, 1)                # ymax, ymin, equ
+                headers.append(h)
+
+            recs = []
+            for h in headers:
+                if h['bid'] > 0 and h['npts'] > 0:
+                    raw = fid.read(4 * h['npts'])
+                    if len(raw) != 4 * h['npts']:
+                        raise ValueError("file ended before all waveforms were read")
+                    rec = {f'Var{i + 1}': v for i, v in enumerate(h['vars'])}
+                    rec.update({f'VarName{i + 1}': n for i, n in enumerate(h['VarNames'])})
+                    rec.update({
+                        'data': np.frombuffer(raw, dtype='<f4'),
+                        'dur_ms': h['dur'],
+                        'npts': h['npts'],
+                        'bid': h['bid'],
+                        'ID': h['ID'],
+                        'memo': h['memo'],
+                        'sgfname1': h['sgfname1'],
+                    })
+                    recs.append(rec)
+    except (struct.error, ValueError) as e:
+        raise ValueError(f"{os.path.basename(PATH)} is not a valid BioSig .awf file ({e}).") from e
+    return {'RecHead': rec_head, 'recs': recs}
+
 def clear_calculation_cache_for_files(file_names):
     if 'calculated_thresholds' in st.session_state:
         keys_to_remove = []
@@ -288,8 +370,27 @@ def process_uploaded_files_cached(uploaded_files, is_rz_file, click, is_atten):
                 df['Freq(Hz)'] = 0.0
                 df = df[['Freq(Hz)'] + [col for col in df.columns if col != 'Freq(Hz)']] # moves freq col to beginning
 
+        elif file.name.endswith(".awf"):
+            # BioSig worksheet: the same records as the .arf, as curated by the user
+            data = awfread(temp_file_path)
+            rows = []
+            for rec in data['recs']:
+                if not click:
+                    freq = rec['Var1']
+                    db = rec['Var2']
+                else:
+                    freq = 'Click'
+                    db = rec['Var1']
+                wave_data = {f'{i}': v * 1e6 for i, v in enumerate(rec['data'])}
+                level_col = 'PostAtten(dB)' if is_atten else 'Level(dB)'
+                rows.append({'Freq(Hz)': freq, level_col: db, **wave_data})
+                duration = rec['dur_ms']
+            if not rows:
+                raise ValueError(f"No waveforms found in {file.name}.")
+            df = pd.DataFrame(rows)
+
         else:
-            raise ValueError(f"Unsupported file type: {file.name}. Please upload .arf, .csv, .tsv or .asc files.")
+            raise ValueError(f"Unsupported file type: {file.name}. Please upload .arf, .awf, .csv, .tsv or .asc files.")
         df.name = file.name
         dfs.append(df)
        
