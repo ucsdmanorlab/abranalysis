@@ -536,7 +536,7 @@ def main():
     else:
         tab2.write("Please upload files to analyze in the 'Data' tab.")
 
-    st.sidebar.caption("[preprint](https://www.biorxiv.org/content/10.1101/2024.06.20.599815v2) | [github](https://github.com/ucsdmanorlab/abranalysis)")
+    st.sidebar.caption("[paper](https://www.nature.com/articles/s41598-026-38045-1) | [github](https://github.com/ucsdmanorlab/abranalysis)")
     st.caption("_ABRA uses automated algorithms for ABR analysis, which may occasionally produce incorrect labels or thresholds. Users should visually verify results and apply expert judgment before drawing conclusions._")
 
 if __name__ == "__main__":
