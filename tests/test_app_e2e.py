@@ -201,13 +201,13 @@ def test_plot_peak_table_offers_settings_download(monkeypatch):
     import utils.plotting as plotting
 
     downloads = {}
-    download_button = st.download_button
+    download_button = DeltaGenerator.download_button
 
-    def record_download(label, data, **kwargs):
+    def record_download(self, label, data, **kwargs):
         downloads[kwargs["key"]] = data
-        return download_button(label, data, **kwargs)
+        return download_button(self, label, data, **kwargs)
 
-    monkeypatch.setattr(st, "download_button", record_download)
+    monkeypatch.setattr(DeltaGenerator, "download_button", record_download)
     monkeypatch.setattr(
         DeltaGenerator, "file_uploader",
         lambda self, *args, **kwargs: [UploadedFile(DEMO_DIR / "20250616 WT.arf")],
