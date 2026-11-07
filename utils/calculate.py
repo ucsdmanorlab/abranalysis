@@ -7,6 +7,7 @@ from scipy.signal import find_peaks
 from sklearn.preprocessing import MinMaxScaler
 
 from .models import default_peak_finding_model, default_thresholding_model
+from .analysis_metadata import add_analysis_metadata
 import streamlit as st
 from .ui import *
 from .processFiles import db_value
@@ -227,6 +228,7 @@ def display_threshold_table(selected_dfs, selected_files, freqs):
     progress_bar, status_text, count = initialize_progress_bar()
 
     metrics_data = {'File Name': [], 'Frequency (Hz)': [], 'Estimated Threshold': []}
+    manual_thresholds = []
     
     for file_df, file_name in zip(selected_dfs, selected_files):
         for freq in freqs:
@@ -244,15 +246,26 @@ def display_threshold_table(selected_dfs, selected_files, freqs):
             metrics_data['File Name'].append(file_name.split("/")[-1])
             metrics_data['Frequency (Hz)'].append(freq)
             metrics_data['Estimated Threshold'].append(threshold)
+            manual_thresholds.append(
+                f"{getattr(file_df, 'name', 'unknown_file')}_{freq}"
+                in st.session_state.get('manual_thresholds', {})
+            )
     
     metrics_table = pd.DataFrame(metrics_data)
     clear_status_bar(progress_bar, status_text)
-    return metrics_table
+    if st.session_state.get('atten', False):
+        metrics_table['Calibration Level (dB)'] = metrics_table['Frequency (Hz)'].map(
+            st.session_state.calibration_levels
+        )
+    edits = {'Manual threshold edit': dict(zip(metrics_table.index, manual_thresholds))}
+    return add_analysis_metadata(metrics_table, st.session_state, peaks=False, manual_edits=edits)
 
 def display_peaks_table(selected_dfs, selected_files, freqs, db_levels, return_threshold=False, return_nas=False, editable=False):
     n_peaks = st.session_state.get('num_peaks', 5)
     progress_bar, status_text, count = initialize_progress_bar()
     metrics_data = {'File Name': [], 'Frequency (Hz)': [], 'Sound amplitude (dB SPL)': [],} 
+    manual_peak_flags = []
+    manual_threshold_flags = []
     atten = st.session_state.get('atten', False)
     db_column = 'Level(dB)' if not atten else 'PostAtten(dB)'
     if atten:
@@ -292,11 +305,19 @@ def display_peaks_table(selected_dfs, selected_files, freqs, db_levels, return_t
                     pass
 
             for db in db_levels:
-                _, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db, return_peaks=True)
+                applied_peak_edits = []
+                _, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(
+                    file_df, freq, db, return_peaks=True, applied_peak_edits=applied_peak_edits
+                )
 
                 # _, y_values, highest_peaks, relevant_troughs = calculate_and_plot_wave(file_df, freq, db)
                 if y_values is None:
                     continue
+                manual_peak_flags.append(bool(applied_peak_edits))
+                manual_threshold_flags.append(
+                    f"{getattr(file_df, 'name', 'unknown_file')}_{freq}"
+                    in st.session_state.get('manual_thresholds', {})
+                )
                 if st.session_state.return_units == 'Nanovolts':
                     y_values *= 1000
 
@@ -357,15 +378,18 @@ def display_peaks_table(selected_dfs, selected_files, freqs, db_levels, return_t
                             
     metrics_table = pd.DataFrame(metrics_data)
     clear_status_bar(progress_bar, status_text)
-    if return_nas:
-        return metrics_table
-    else:
+    if not return_nas:
         # Only require the core columns; per-peak columns may legitimately be NaN when fewer peaks exist or are requested
         optional_prefixes = ('Peak ', 'Trough ')
         required_cols = [c for c in metrics_table.columns if not c.startswith(optional_prefixes)]
         if n_peaks < 4:
             required_cols = [c for c in required_cols if c != 'Amplitude Ratio (Peak1/Peak4)']
-        return metrics_table.dropna(subset=required_cols)
+        metrics_table = metrics_table.dropna(subset=required_cols).copy()
+    edits = {
+        'Manual peak edit': {i: manual_peak_flags[i] for i in metrics_table.index},
+        'Manual threshold used': {i: manual_threshold_flags[i] for i in metrics_table.index},
+    }
+    return add_analysis_metadata(metrics_table, st.session_state, peaks=True, manual_edits=edits)
 
 def display_metrics_table_all_db(selected_dfs, selected_files, freqs, db_levels):
     n_peaks = st.session_state.get('num_peaks', 5)
@@ -463,7 +487,8 @@ def get_manual_peak_latency(file_name, freq, db, peak_column):
     
     return None
 
-def apply_manual_peak_edits(file_name, freq, db, x_values, y_values, highest_peaks, relevant_troughs):
+def apply_manual_peak_edits(file_name, freq, db, x_values, y_values, highest_peaks, relevant_troughs,
+                            *, applied_edits=None):
     """Apply manual peak latency edits to calculated peaks"""
     n_peaks = st.session_state.get('num_peaks', 5)
 
@@ -501,6 +526,8 @@ def apply_manual_peak_edits(file_name, freq, db, x_values, y_values, highest_pea
                 check_range = slice(max(0, new_index - 1), min(len(y_values) - 1, new_index + 1))
                 local_max_index = np.argmax(y_values[check_range]) + check_range.start
                 modified_peaks[peak_num] = local_max_index
+                if applied_edits is not None:
+                    applied_edits.append(column)
         
         elif 'Trough' in column and 'latency' in column and not pd.isna(latency_ms):
             trough_num = int(column.split()[1]) - 1
@@ -512,6 +539,8 @@ def apply_manual_peak_edits(file_name, freq, db, x_values, y_values, highest_pea
                 check_range = slice(max(0, new_index - 1), min(len(y_values) - 1, new_index + 1))
                 local_min_index = np.argmin(y_values[check_range]) + check_range.start
                 modified_troughs[trough_num] = local_min_index
+                if applied_edits is not None:
+                    applied_edits.append(column)
     
     valid_peaks = modified_peaks[~np.isnan(modified_peaks)]
     valid_troughs = modified_troughs[~np.isnan(modified_troughs)]
@@ -528,7 +557,8 @@ def apply_manual_peak_edits(file_name, freq, db, x_values, y_values, highest_pea
     
     return valid_peaks, valid_troughs
 
-def calculate_and_plot_wave(df, freq, db, peak_finding_model=default_peak_finding_model(), return_peaks=True):
+def calculate_and_plot_wave(df, freq, db, peak_finding_model=default_peak_finding_model(), return_peaks=True,
+                            *, applied_peak_edits=None):
     file_name = getattr(df, 'name', 'unknown_file')
 
     cache_key = f"wave_{file_name}_{freq}_{db}_{return_peaks}" 
@@ -556,7 +586,8 @@ def calculate_and_plot_wave(df, freq, db, peak_finding_model=default_peak_findin
                 else:
                     db_spl = db_value(file_name, freq, db)
                     modified_peaks, modified_troughs = apply_manual_peak_edits(
-                        file_name.split('/')[-1], freq, db_spl, x_values, y_values, highest_peaks, relevant_troughs
+                        file_name.split('/')[-1], freq, db_spl, x_values, y_values, highest_peaks, relevant_troughs,
+                        applied_edits=applied_peak_edits
                     )
                     return x_values, y_values, modified_peaks, modified_troughs
         else: 
@@ -566,12 +597,16 @@ def calculate_and_plot_wave(df, freq, db, peak_finding_model=default_peak_findin
 
     st.session_state.calculated_waves[cache_key] = result
 
+    if return_peaks and not calc_peaks:
+        return result
+
     if return_peaks and len(result) == 4:
         x_values, y_values, highest_peaks, relevant_troughs = result
         if y_values is not None:
             db_spl = db_value(file_name, freq, db)
             modified_peaks, modified_troughs = apply_manual_peak_edits(
-                file_name.split('/')[-1], freq, db_spl, x_values, y_values, highest_peaks, relevant_troughs
+                file_name.split('/')[-1], freq, db_spl, x_values, y_values, highest_peaks, relevant_troughs,
+                applied_edits=applied_peak_edits
             )
             return x_values, y_values, modified_peaks, modified_troughs
 

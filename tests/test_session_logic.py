@@ -215,10 +215,29 @@ class TestTables:
         freqs = sorted(df["Freq(Hz)"].unique())
         table = display_threshold_table([df], [f"/tmp/{df.name}"], freqs)
         assert list(table.columns) == ["File Name", "Frequency (Hz)", "Estimated Threshold"]
+        assert table.attrs["analysis_metadata"]["ABRA code version"]
         assert len(table) == len(freqs)
         assert set(table["File Name"]) == {"20250616 WT.arf"}
         for _, row in table.iterrows():
             assert row["Estimated Threshold"] == calculate_hearing_threshold(df, row["Frequency (Hz)"])
+
+    def test_threshold_records_calibration_for_each_frequency(self, load_demo, apply_settings):
+        apply_settings(atten=True)
+        df, _ = load_demo("20250616 WT.arf", is_atten=True)
+        from streamlit import session_state
+
+        session_state.calibration_levels = {8000.0: 100.0, 16000.0: 95.0}
+        table = display_threshold_table([df], [f"/tmp/{df.name}"], [8000.0, 16000.0])
+        assert table["Calibration Level (dB)"].tolist() == [100.0, 95.0]
+
+    def test_threshold_manual_flags_are_snapshotted_per_frequency(self, load_demo, apply_settings, session_state):
+        apply_settings()
+        df, _ = load_demo("20250616 WT.arf")
+        session_state.manual_thresholds = {f"{df.name}_8000.0": 45.0}
+        table = display_threshold_table([df], [f"/tmp/{df.name}"], [8000.0, 16000.0])
+        assert table.attrs["manual_edits"]["Manual threshold edit"] == {0: True, 1: False}
+        session_state.manual_thresholds.clear()
+        assert table.attrs["manual_edits"]["Manual threshold edit"] == {0: True, 1: False}
 
     def test_threshold_table_skips_missing_frequencies(self, load_demo, apply_settings):
         apply_settings()
@@ -234,6 +253,7 @@ class TestTables:
             "File Name", "Frequency (Hz)", "Sound amplitude (dB SPL)",
             "Wave I amplitude (P1-T1) (μV)", "Latency to First Peak (ms)", "Amplitude Ratio (Peak1/Peak4)",
         ]
+        assert table.attrs["analysis_metadata"]["Peak I method"] == "Pretrained model"
         assert list(table["Sound amplitude (dB SPL)"]) == [60.0, 80.0]
 
     def test_peaks_table_optional_columns(self, load_demo, apply_settings):
@@ -245,6 +265,65 @@ class TestTables:
             assert f"Peak {n} latency (ms)" in table.columns
             assert f"Trough {n} (μV)" in table.columns
         assert "Peak 4 latency (ms)" not in table.columns
+
+    def test_peak_metadata_is_a_snapshot_of_settings(self, load_demo, apply_settings, session_state):
+        apply_settings(pretrained_pk1=False, pk1_anchor=1.5, pk_bk_subtraction=True, bk_window=1.2)
+        df, _ = load_demo("20250616 WT.arf")
+        first = display_peaks_table([df], [f"/tmp/{df.name}"], [8000.0], [90.0])
+        session_state.pk1_anchor = 2.0
+        session_state.pk_bk_subtraction = False
+        session_state.calculated_waves.clear()
+        second = display_peaks_table([df], [f"/tmp/{df.name}"], [8000.0], [90.0])
+        assert first.attrs["analysis_metadata"]["Peak I search time (ms)"] == 1.5
+        assert first.attrs["analysis_metadata"]["Background window (ms)"] == 1.2
+        assert second.attrs["analysis_metadata"]["Peak I search time (ms)"] == 2.0
+        assert second.attrs["analysis_metadata"]["Background window (ms)"] == ""
+
+    @pytest.mark.parametrize("atten", [False, True])
+    def test_peak_manual_flags_match_applied_edits(self, load_demo, apply_settings, session_state, atten):
+        apply_settings(atten=atten, peaks_below_thresh=True)
+        df, _ = load_demo("20250616 WT.arf", is_atten=atten)
+        session_state.calibration_levels = {8000.0: 100.0}
+        level = 10.0 if atten else 90.0
+        spl = 90.0
+        session_state.manual_peaks = {
+            f"{df.name}_8000.0_{spl}": {"Peak 1 latency (ms)": 1.7},
+        }
+        session_state.manual_thresholds = {f"{df.name}_8000.0": 25.0}
+        table = display_peaks_table([df], [f"/tmp/{df.name}"], [8000.0], [level])
+        assert table.attrs["manual_edits"]["Manual peak edit"] == {0: True}
+        assert table.attrs["manual_edits"]["Manual threshold used"] == {0: True}
+        session_state.manual_peaks.clear()
+        assert table.attrs["manual_edits"]["Manual peak edit"] == {0: True}
+
+    def test_peak_flags_ignore_out_of_range_edits(self, load_demo, apply_settings, session_state):
+        apply_settings(peaks_below_thresh=True)
+        df, _ = load_demo("20250616 WT.arf")
+        session_state.manual_peaks = {
+            f"{df.name}_8000.0_90.0": {"Peak 1 latency (ms)": 99.0},
+            f"another-file_8000.0_90.0": {"Peak 1 latency (ms)": 1.7},
+        }
+        table = display_peaks_table([df], [f"/tmp/{df.name}"], [8000.0], [90.0])
+        assert table.attrs["manual_edits"]["Manual peak edit"] == {0: False}
+
+    def test_peak_flags_ignore_edits_when_peaks_are_suppressed(self, load_demo, apply_settings, session_state):
+        apply_settings(peaks_below_thresh=False)
+        df, _ = load_demo("20250616 WT.arf")
+        session_state.manual_thresholds = {f"{df.name}_8000.0": 80.0}
+        session_state.manual_peaks = {f"{df.name}_8000.0_10.0": {"Peak 1 latency (ms)": 1.7}}
+        table = display_peaks_table([df], [f"/tmp/{df.name}"], [8000.0], [10.0], return_nas=True)
+        assert table.attrs["manual_edits"]["Manual peak edit"] == {0: False}
+        assert table.attrs["manual_edits"]["Manual threshold used"] == {0: True}
+
+    def test_peak_flag_alignment_after_empty_rows_are_removed(self, load_demo, apply_settings, session_state):
+        apply_settings()
+        df, _ = load_demo("20250616 WT.arf")
+        session_state.manual_peaks = {
+            f"{df.name}_8000.0_90.0": {"Peak 1 latency (ms)": 1.7},
+        }
+        table = display_peaks_table([df], [f"/tmp/{df.name}"], [8000.0], [10.0, 90.0])
+        assert table.index.tolist() == [1]
+        assert table.attrs["manual_edits"]["Manual peak edit"] == {1: True}
 
     def test_editable_table_has_latency_columns_only(self, load_demo, apply_settings):
         apply_settings(num_peaks=4)

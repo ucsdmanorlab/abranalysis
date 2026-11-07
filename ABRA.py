@@ -7,6 +7,7 @@ import pandas as pd
 import streamlit as st
 
 from utils.calculate import display_threshold_table, display_peaks_table
+from utils.analysis_metadata import table_with_settings_csv
 from utils.plotting import *
 from utils.processFiles import get_selected_data, process_uploaded_files_cached, db_column_name
 
@@ -416,14 +417,22 @@ def main():
                             2. Open in browser → Print → Save as PDF
                             """)
                         
-        lock_cols = ["File Name", "Frequency (Hz)", 'Sound amplitude (dB SPL)', 'Attenuation (dB)', 'Calibration Level (dB)']
+        if any(st.session_state.get(key) is not None for key in ('current_table', 'threshold_table', 'peaks_table')):
+            st.caption("Use the download buttons below to include analysis settings. The table toolbar downloads data only.")
+
         if 'current_table' in st.session_state and st.session_state['current_table'] is not None:
             metrics_table = st.session_state['current_table']
             st.dataframe(metrics_table, hide_index=True, width='stretch')
+            st.download_button(
+                "Download peak analyses (CSV with settings)",
+                table_with_settings_csv(metrics_table, metrics_table.attrs["analysis_metadata"], metrics_table.attrs["manual_edits"]),
+                file_name="peak_analyses_with_settings.csv", mime="text/csv", key="download_all_peaks_settings",
+                type="primary",
+            )
             
         if 'threshold_table' in st.session_state and st.session_state['threshold_table'] is not None:
             threshold_table = st.session_state['threshold_table']
-            disable_columns = [col for col in threshold_table.columns if col in lock_cols]
+            disable_columns = [col for col in threshold_table.columns if col != 'Estimated Threshold']
             edited_df = st.data_editor(threshold_table, hide_index=True, width='stretch', disabled=disable_columns)
             if (edited_df != threshold_table).any().any():
                 if 'manual_thresholds' not in st.session_state:
@@ -437,6 +446,19 @@ def main():
                     edit_key = f"{file_name}_{freq}"
                     st.session_state.manual_thresholds[edit_key] = threshold
                     st.success(f"Set manual threshold for {file_name}, {freq} Hz to {threshold} dB. Choose plot option to refresh.")
+            threshold_edits = dict(threshold_table.attrs["manual_edits"]["Manual threshold edit"])
+            old_values = threshold_table["Estimated Threshold"]
+            new_values = edited_df["Estimated Threshold"]
+            changed = ~(old_values.eq(new_values) | (old_values.isna() & new_values.isna()))
+            for index in edited_df.index[changed]:
+                threshold_edits[index] = True
+            st.download_button(
+                "Download thresholds (CSV with settings)",
+                table_with_settings_csv(edited_df, threshold_table.attrs["analysis_metadata"],
+                                        {"Manual threshold edit": threshold_edits}),
+                file_name="thresholds_with_settings.csv", mime="text/csv", key="download_threshold_settings",
+                type="primary",
+            )
         if 'peaks_table' in st.session_state and st.session_state['peaks_table'] is not None:
             peaks_table = st.session_state['peaks_table']
             
@@ -446,15 +468,20 @@ def main():
             
             if not st.session_state.editing_peaks_table:
                 st.dataframe(peaks_table, hide_index=True, width='stretch')
+                col1, col2 = st.columns([1, 1])
+                col1.download_button(
+                    "Download peak analyses (CSV with settings)",
+                    table_with_settings_csv(peaks_table, peaks_table.attrs["analysis_metadata"], peaks_table.attrs["manual_edits"]),
+                    file_name="peak_analyses_with_settings.csv", mime="text/csv", key="download_peaks_settings",
+                    type="primary",
+                )
                 if 'peak_editor_table' in st.session_state and st.session_state.peak_editor_table is not None:
-                    col1, col2, col3 = st.columns([1, 1, 1])
-                    if col1.button("Edit peaks table"):
+                    if col2.button("Edit peaks table"):
                         st.session_state.editing_peaks_table = True
                         st.rerun()
                     
             else:
-                col1, col2 = st.columns([1, 1])
-                col1.warning("**Editing peaks mode**")
+                st.warning("**Editing peaks mode**")
 
                 peak_editor_table = st.session_state['peak_editor_table'] 
                 disable_columns = [col for col in peak_editor_table.columns if 'latency' not in col]
@@ -474,13 +501,12 @@ def main():
                         for row_idx, col_idx in zip(edited_positions[0], edited_positions[1]):
                             file_name = edited_peaks_df.iloc[row_idx]['File Name']
                             freq = edited_peaks_df.iloc[row_idx]['Frequency (Hz)']
-                            db_column = 'Sound amplitude (dB SPL)' if level else 'Attenuation (dB)'
-                            db = edited_peaks_df.iloc[row_idx][db_column]
+                            db_spl = edited_peaks_df.iloc[row_idx]['Sound amplitude (dB SPL)']
 
                             column_name = edited_peaks_df.columns[col_idx]
                             new_value = edited_peaks_df.iloc[row_idx, col_idx]
                             
-                            waveform_key = f"{file_name}_{freq}_{db}"
+                            waveform_key = f"{file_name}_{freq}_{db_spl}"
                             if waveform_key not in st.session_state.manual_peaks:
                                 st.session_state.manual_peaks[waveform_key] = {}
 
