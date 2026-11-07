@@ -144,7 +144,7 @@ def test_tables_offer_downloads_with_analysis_settings(monkeypatch):
 
     next(button for button in at.button if button.label == "Return all peak analyses").click().run()
     assert not at.exception, [e.value for e in at.exception]
-    peak_table = at.get("arrow_data_frame")[0].value
+    peak_table = at.dataframe[0].value
     assert len(peak_table) > 0
     assert "Peak I method" not in peak_table.columns
     assert at.session_state["current_table"].attrs["analysis_metadata"]["Peak I method"] == "Pretrained model"
