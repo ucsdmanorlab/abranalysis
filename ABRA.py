@@ -501,12 +501,12 @@ def main():
                         for row_idx, col_idx in zip(edited_positions[0], edited_positions[1]):
                             file_name = edited_peaks_df.iloc[row_idx]['File Name']
                             freq = edited_peaks_df.iloc[row_idx]['Frequency (Hz)']
-                            db = edited_peaks_df.iloc[row_idx]['Sound amplitude (dB SPL)']
+                            db_spl = edited_peaks_df.iloc[row_idx]['Sound amplitude (dB SPL)']
 
                             column_name = edited_peaks_df.columns[col_idx]
                             new_value = edited_peaks_df.iloc[row_idx, col_idx]
                             
-                            waveform_key = f"{file_name}_{freq}_{db}"
+                            waveform_key = f"{file_name}_{freq}_{db_spl}"
                             if waveform_key not in st.session_state.manual_peaks:
                                 st.session_state.manual_peaks[waveform_key] = {}
 
