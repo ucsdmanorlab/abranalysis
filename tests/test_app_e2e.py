@@ -221,3 +221,8 @@ def test_plot_peak_table_offers_settings_download(monkeypatch):
     rows = list(csv.reader(io.StringIO(downloads["download_peaks_settings"].decode("utf-8-sig"))))
     assert ["Peak I method", "Pretrained model"] in rows
     assert "Manual peak edit" in rows[rows.index([]) + 1]
+
+    next(button for button in at.button if button.label == "Edit peaks table").click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert at.session_state["editing_peaks_table"]
+    assert any("Editing peaks mode" in warning.value for warning in at.warning)
