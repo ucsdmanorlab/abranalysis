@@ -38,9 +38,9 @@ def analysis_metadata(settings, *, peaks):
             "Peak I method": "Pretrained model" if pretrained else "Search around time",
             "Peak I search time (ms)": "" if pretrained else settings.get("pk1_anchor", 1.0),
             "Number of peaks": settings.get("num_peaks", 5),
-            "Peak cutoff time (ms)": settings.get("max_pk_time", 8.0),
+            "Peak cutoff time (ms)": settings.get("max_pk_time", 10.0),
             "Background subtraction": background,
-            "Background window (ms)": settings.get("bk_window", 1.0) if background else "",
+            "Background window (ms)": settings.get("bk_window", 0.2) if background else "",
             "Peaks below threshold": settings.get("peaks_below_thresh", False),
             "All peaks in table": settings.get("all_peaks", False),
         })
