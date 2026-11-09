@@ -67,10 +67,12 @@ Click the thumbnail below to see an example of the .csv format:
 2. Choose the "Plotting and Analysis" tab, and select the data you'd like to plot or output. 
 ![Screen recording of switching to the plotting tab, choosing a specific frequency and dB SPL, and then choosing various plotting and table output functions](https://github.com/user-attachments/assets/114ffb6d-333d-46ff-9ca9-45791d59f637)
 
-### Optional usage:
+3. **Recommended:** Use **Download thresholds (CSV with settings)** or
+   **Download peak analyses (CSV with settings)** to save your results along
+   with the analysis settings. The download also flags manual edits. The table
+   toolbar's download saves only the table, without this extra information.
 
-* Hover over the top right of a data table to download to csv
-![download_csv](https://github.com/user-attachments/assets/62367808-e46d-43d7-84ff-e0b5e0639c13)
+### Optional usage:
 
 * Customize peak finding under "Peak finding settings" (changing any of these clears previously calculated peaks and thresholds):
   * Number of peaks: how many peaks to search for (1-10, default 5). Peak tables adjust to the chosen number. 
