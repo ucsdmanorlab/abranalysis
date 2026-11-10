@@ -14,6 +14,14 @@ from utils.processFiles import get_selected_data, process_uploaded_files_cached,
 import warnings
 warnings.filterwarnings('ignore')
 
+TAB2_SETTING_KEYS = (
+    "show_legend", "return_units", "auto_y", "y_min", "y_max",
+    "plot_time_warped", "serif_font", "show_peaks", "num_peaks",
+    "pretrained_pk1", "pk1_anchor", "max_pk_time", "pk_bk_subtraction",
+    "bk_window", "multiply_y_factor", "vert_space", "stacked_labels",
+    "all_peaks", "peaks_below_thresh",
+)
+
 def _try_get_kaleido_chrome():
     # one attempt per session; kaleido>=1.0 needs its own Chrome download for PDF export
     if st.session_state.get('_kaleido_chrome_attempted'):
@@ -196,6 +204,15 @@ def main():
     tab1, tab2 = st.sidebar.tabs(["Data", "Plotting and Analysis"])
     
     uploaded_files = tab1.file_uploader("**Upload files to analyze:**", type=["csv", "arf", "awf", "asc", "tsv"], accept_multiple_files=True)
+    saved_settings = st.session_state.setdefault("_saved_tab2_settings", {})
+    for key in TAB2_SETTING_KEYS:
+        if key in st.session_state:
+            saved_settings[key] = st.session_state[key]
+    if uploaded_files:
+        for key, value in saved_settings.items():
+            if key not in st.session_state:
+                st.session_state[key] = value
+
     tab1.markdown("<small><i>Note: All uploaded files are processed in memory only and are not retained by the application.</i></small>", unsafe_allow_html=True)
     # Inputs:
     inputs = tab1.expander("Input data properties", expanded=True)
@@ -260,7 +277,7 @@ def main():
         plot_time_warped = outputs.toggle("Time warping", False, key="plot_time_warped")
         serif_font = outputs.toggle("Serif fonts", value=False, key="serif_font")
         #peak_settings = tab2.expander("**Peak & trough settings**", expanded=False)
-        show_peaks = outputs.toggle("Show peaks/troughs", True)
+        show_peaks = outputs.toggle("Show peaks/troughs", True, key="show_peaks")
 
         peak_settings = tab2.expander("**Peak finding settings**", expanded=False)
         num_peaks = peak_settings.number_input("Number of peaks", value=5, min_value=1, max_value=10, step=1, key="num_peaks")
@@ -275,7 +292,7 @@ def main():
         advanced_settings = tab2.expander("**Advanced settings**", expanded=False)
         multiply_y_factor = advanced_settings.number_input("Multiply Y values by factor", value=1.0, key="multiply_y_factor")
         vert_space = advanced_settings.number_input("Vertical space (for stacked curves)", value=10.0, min_value=0.0, step=1.0, key="vert_space")
-        stacked_labels = advanced_settings.selectbox("Stacked labels position", options=["Left outside", "Right outside", "Right inside", "Off"], index=2)
+        stacked_labels = advanced_settings.selectbox("Stacked labels position", options=["Left outside", "Right outside", "Right inside", "Off"], index=2, key="stacked_labels")
         all_peaks = advanced_settings.toggle("ALL peaks/troughs in table (experimental)", value=False, key="all_peaks")
         peaks_below_thresh = advanced_settings.toggle("Peaks below threshold", value=False, key="peaks_below_thresh")
 
