@@ -109,10 +109,12 @@ def test_attenuation_toggle_with_multiple_files_has_no_duplicate_keys(monkeypatc
 
 
 def test_tab2_settings_survive_removing_all_files_without_widget_warnings(monkeypatch, caplog):
+    import utils.calculate as calculate
     from streamlit.delta_generator import DeltaGenerator
 
     from conftest import DEMO_DIR, UploadedFile
 
+    monkeypatch.setattr(calculate, "display_threshold_table", lambda *args: None)
     uploaded_paths = [DEMO_DIR / "55.csv"]
     monkeypatch.setattr(
         DeltaGenerator, "file_uploader",
@@ -120,19 +122,37 @@ def test_tab2_settings_survive_removing_all_files_without_widget_warnings(monkey
     )
     at = AppTest.from_file("ABRA.py", default_timeout=120).run()
     at.number_input(key="num_peaks").set_value(3).run()
+    at.toggle(key="pretrained_pk1").set_value(False).run()
+    at.number_input(key="pk1_anchor").set_value(1.8).run()
+    at.number_input(key="max_pk_time").set_value(9.0).run()
+    at.toggle(key="pk_bk_subtraction").set_value(True).run()
+    at.number_input(key="bk_window").set_value(0.5).run()
     at.toggle(key="show_legend").set_value(False)
     at.toggle(key="show_peaks").set_value(False)
     at.selectbox(key="stacked_labels").set_value("Off")
     at.run()
     assert not at.exception, [e.value for e in at.exception]
+    next(button for button in at.button if button.label == "Return all thresholds").click().run()
+    assert not at.exception, [e.value for e in at.exception]
 
     uploaded_paths.clear()
     at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert at.number_input(key="num_peaks").value == 3
+    assert at.number_input(key="pk1_anchor").value == 1.8
+    assert at.number_input(key="max_pk_time").value == 9.0
+    assert at.number_input(key="bk_window").value == 0.5
+
     uploaded_paths.append(DEMO_DIR / "80.csv")
     at.run()
 
     assert not at.exception, [e.value for e in at.exception]
     assert at.number_input(key="num_peaks").value == 3
+    assert at.toggle(key="pretrained_pk1").value is False
+    assert at.number_input(key="pk1_anchor").value == 1.8
+    assert at.number_input(key="max_pk_time").value == 9.0
+    assert at.toggle(key="pk_bk_subtraction").value is True
+    assert at.number_input(key="bk_window").value == 0.5
     assert at.toggle(key="show_legend").value is False
     assert at.toggle(key="show_peaks").value is False
     assert at.selectbox(key="stacked_labels").value == "Off"
