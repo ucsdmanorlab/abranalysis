@@ -108,7 +108,7 @@ def test_attenuation_toggle_with_multiple_files_has_no_duplicate_keys(monkeypatc
     assert {n.key for n in at.number_input if str(n.key).startswith("cal_")} == {"cal_8000", "cal_16000"}
 
 
-def test_tab2_settings_survive_removing_all_files(monkeypatch):
+def test_tab2_settings_survive_removing_all_files_without_widget_warnings(monkeypatch, caplog):
     from streamlit.delta_generator import DeltaGenerator
 
     from conftest import DEMO_DIR, UploadedFile
@@ -120,6 +120,7 @@ def test_tab2_settings_survive_removing_all_files(monkeypatch):
     )
     at = AppTest.from_file("ABRA.py", default_timeout=120).run()
     at.number_input(key="num_peaks").set_value(3).run()
+    at.toggle(key="show_legend").set_value(False)
     at.toggle(key="show_peaks").set_value(False)
     at.selectbox(key="stacked_labels").set_value("Off")
     at.run()
@@ -132,8 +133,14 @@ def test_tab2_settings_survive_removing_all_files(monkeypatch):
 
     assert not at.exception, [e.value for e in at.exception]
     assert at.number_input(key="num_peaks").value == 3
+    assert at.toggle(key="show_legend").value is False
     assert at.toggle(key="show_peaks").value is False
     assert at.selectbox(key="stacked_labels").value == "Off"
+    assert not any(
+        'was created with a default value but also had its value set via the Session State API'
+        in record.getMessage()
+        for record in caplog.records
+    )
 
 
 def test_tables_offer_downloads_with_analysis_settings(monkeypatch):
