@@ -196,6 +196,7 @@ def main():
     tab1, tab2 = st.sidebar.tabs(["Data", "Plotting and Analysis"])
     
     uploaded_files = tab1.file_uploader("**Upload files to analyze:**", type=["csv", "arf", "awf", "asc", "tsv"], accept_multiple_files=True)
+
     tab1.markdown("<small><i>Note: All uploaded files are processed in memory only and are not retained by the application.</i></small>", unsafe_allow_html=True)
     # Inputs:
     inputs = tab1.expander("Input data properties", expanded=True)
@@ -207,6 +208,35 @@ def main():
     click = True if is_click == "Click" else False
     # is_rz_file = inputs.radio("BioSig version (.arf files):", ("RZ", "RP"), horizontal=True, index=0) 
     is_atten = inputs.toggle("dB saved as attenuation (.arf/.awf only)", value=False, key="atten")
+
+    outputs = tab2.expander("**Visualization**", expanded=False)
+    show_legend = outputs.toggle("Plot legends", True, key="show_legend")
+    return_units = outputs.selectbox("Output units", options=['Microvolts', 'Nanovolts'], index=0, key="return_units")
+    auto_y = outputs.toggle("Auto-scale Y", value=True, key="auto_y")
+    if not auto_y:
+        ycol1, ycol2 = outputs.columns(2)
+        y_min = ycol1.number_input("Y min", value=-5000 if return_units == 'Nanovolts' else -5.0, key="y_min")
+        y_max = ycol2.number_input("Y max", value=5000 if return_units == 'Nanovolts' else 5.0, key="y_max")
+    plot_time_warped = outputs.toggle("Time warping", False, key="plot_time_warped")
+    serif_font = outputs.toggle("Serif fonts", value=False, key="serif_font")
+    show_peaks = outputs.toggle("Show peaks/troughs", True, key="show_peaks")
+
+    peak_settings = tab2.expander("**Peak finding settings**", expanded=False)
+    num_peaks = peak_settings.number_input("Number of peaks", value=5, min_value=1, max_value=10, step=1, key="num_peaks")
+    pretrained_pk1 = peak_settings.toggle("Use pretained model to detect peak I", value=True, key="pretrained_pk1")
+    if not pretrained_pk1:
+        pk1_anchor = peak_settings.number_input("Search for peak I around time (ms)", value=1.0, min_value=0.0, step=0.1, key="pk1_anchor")
+    max_pk_time = peak_settings.number_input("Disallow peaks & troughs after time (ms)", value=8.0, min_value=1.0, max_value=10.0, step=0.1, key="max_pk_time")
+    pk_bk_subtraction = peak_settings.toggle("Use background subtraction", value=False, key="pk_bk_subtraction")
+    if pk_bk_subtraction:
+        bk_window = peak_settings.number_input("Background subtraction window (ms)", value=1.0, min_value=0.1, max_value=5.0, step=0.01, key="bk_window")
+
+    advanced_settings = tab2.expander("**Advanced settings**", expanded=False)
+    multiply_y_factor = advanced_settings.number_input("Multiply Y values by factor", value=1.0, key="multiply_y_factor")
+    vert_space = advanced_settings.number_input("Vertical space (for stacked curves)", value=10.0, min_value=0.0, step=1.0, key="vert_space")
+    stacked_labels = advanced_settings.selectbox("Stacked labels position", options=["Left outside", "Right outside", "Right inside", "Off"], index=2, key="stacked_labels")
+    all_peaks = advanced_settings.toggle("ALL peaks/troughs in table (experimental)", value=False, key="all_peaks")
+    peaks_below_thresh = advanced_settings.toggle("Peaks below threshold", value=False, key="peaks_below_thresh")
 
     if uploaded_files:
         validation_errors = []
@@ -247,37 +277,6 @@ def main():
                 )
             # TODO: add option to set legend to show attenuation
             #atten_legend = cal_levels.toggle("Use attenuation levels in plot legends", value=False)
-
-        # Output settings:
-        outputs = tab2.expander("**Visualization**", expanded=False)
-        show_legend = outputs.toggle("Plot legends", True, key="show_legend")
-        return_units = outputs.selectbox("Output units", options=['Microvolts', 'Nanovolts'], index=0, key="return_units")
-        auto_y = outputs.toggle("Auto-scale Y", value=True, key="auto_y")
-        if not auto_y:
-            ycol1, ycol2 = outputs.columns(2)
-            y_min = ycol1.number_input("Y min", value=-5000 if return_units == 'Nanovolts' else -5.0, key="y_min")
-            y_max = ycol2.number_input("Y max", value=5000 if return_units == 'Nanovolts' else 5.0, key="y_max")
-        plot_time_warped = outputs.toggle("Time warping", False, key="plot_time_warped")
-        serif_font = outputs.toggle("Serif fonts", value=False, key="serif_font")
-        #peak_settings = tab2.expander("**Peak & trough settings**", expanded=False)
-        show_peaks = outputs.toggle("Show peaks/troughs", True)
-
-        peak_settings = tab2.expander("**Peak finding settings**", expanded=False)
-        num_peaks = peak_settings.number_input("Number of peaks", value=5, min_value=1, max_value=10, step=1, key="num_peaks")
-        pretrained_pk1 = peak_settings.toggle("Use pretained model to detect peak I", value=True, key="pretrained_pk1")
-        if not pretrained_pk1:
-            pk1_anchor = peak_settings.number_input("Search for peak I around time (ms)", value=1.0, min_value=0.0, step=0.1, key="pk1_anchor")
-        max_pk_time = peak_settings.number_input("Disallow peaks & troughs after time (ms)", value=8.0, min_value=1.0, max_value=10.0, step=0.1, key="max_pk_time")
-        pk_bk_subtraction = peak_settings.toggle("Use background subtraction", value=False, key="pk_bk_subtraction")
-        if pk_bk_subtraction:
-            bk_window = peak_settings.number_input("Background subtraction window (ms)", value=1.0, min_value=0.1, max_value=5.0, step=0.01, key="bk_window")
-
-        advanced_settings = tab2.expander("**Advanced settings**", expanded=False)
-        multiply_y_factor = advanced_settings.number_input("Multiply Y values by factor", value=1.0, key="multiply_y_factor")
-        vert_space = advanced_settings.number_input("Vertical space (for stacked curves)", value=10.0, min_value=0.0, step=1.0, key="vert_space")
-        stacked_labels = advanced_settings.selectbox("Stacked labels position", options=["Left outside", "Right outside", "Right inside", "Off"], index=2)
-        all_peaks = advanced_settings.toggle("ALL peaks/troughs in table (experimental)", value=False, key="all_peaks")
-        peaks_below_thresh = advanced_settings.toggle("Peaks below threshold", value=False, key="peaks_below_thresh")
 
         #unfilter_pk1 = advanced_settings.toggle("Include sub-threshold peak 1 amplitudes", value=False, key="unfilter_pk1")
 
